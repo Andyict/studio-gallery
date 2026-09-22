@@ -52,9 +52,11 @@ jobs:
           cp synology/scripts/* stage/scripts/
           cp docker-compose.registry.yml stage/var/docker-compose.yml
           cp deploy/nginx.conf stage/var/deploy/nginx.conf
-          tar -czf stage/package.tgz -C stage/var .
+          # DSM expects classic USTAR archives; GNU tar defaults to pax on
+          # newer runners, which Package Center rejects as an invalid SPK.
+          tar --format=ustar -czf stage/package.tgz -C stage/var .
           rm -rf stage/var
-          tar -cf StudioGallery-0.1.0-noarch.spk -C stage INFO conf scripts package.tgz
+          tar --format=ustar -cf StudioGallery-0.1.0-noarch.spk -C stage INFO conf scripts package.tgz
       - uses: actions/upload-artifact@v4
         with:
           name: StudioGallery-0.1.0-noarch

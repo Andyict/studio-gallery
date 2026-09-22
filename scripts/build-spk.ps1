@@ -13,7 +13,7 @@ Remove-Item $out -Force -ErrorAction SilentlyContinue
 $payload = Join-Path $stage 'package-root'
 New-Item -ItemType Directory -Force -Path $payload | Out-Null
 Move-Item "$stage\var" $payload
-tar -czf "$stage\package.tgz" -C $payload .
+tar --format=ustar -czf "$stage\package.tgz" -C $payload .
 Remove-Item $payload -Recurse -Force
-tar -cf $out -C $stage INFO conf scripts package.tgz
+tar --format=ustar -cf $out -C $stage INFO conf scripts package.tgz
 Get-Item $out | Select-Object FullName,Length
