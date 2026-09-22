@@ -1,0 +1,1 @@
+export const isVideo = (photo: {extension?: string; filename?: string}) => /\.(3g2|3gp|asf|avi|divx|dv|f4v|flv|h264|hevc|m2t|m2ts|m2v|m4v|mjpeg|mjpg|mkv|mod|mov|mp4|mpe|mpeg|mpg|mts|mxf|ogv|rm|rmvb|tod|ts|vob|webm|wmv|y4m)$/i.test(photo.extension || photo.filename || '');

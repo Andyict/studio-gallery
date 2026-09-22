@@ -1,0 +1,9 @@
+node_modules/
+.next/
+.env
+.runtime/
+data/
+cache/
+test-results/
+*.log
+NAS-ACCESS.txt

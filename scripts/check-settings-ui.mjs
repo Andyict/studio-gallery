@@ -1,0 +1,33 @@
+import {chromium} from '@playwright/test';
+import {readFile,mkdir} from 'node:fs/promises';
+const base=process.env.CHECK_ORIGIN||'http://192.168.50.246:8088';
+const env=process.env.CHECK_PASSWORD?'':await readFile(process.env.CHECK_ENV_FILE||'W:/docker/nas-photo-proofing/.env','utf8');
+const password=process.env.CHECK_PASSWORD||env.split(/\r?\n/).find(l=>l.startsWith('ADMIN_PASSWORD=')).slice(15);
+const browser=await chromium.launch({headless:true});
+try {
+ const page=await browser.newPage({viewport:{width:1440,height:1000}});
+ const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.goto(`${base}/admin`);
+ await page.getByLabel('Tên đăng nhập',{exact:true}).fill('admin');
+ await page.getByLabel('Mật khẩu',{exact:true}).fill(password);
+ await page.getByRole('button',{name:'Vào studio'}).click();
+ await page.getByRole('button',{name:'Cài đặt & nhân viên',exact:true}).click();
+ await page.getByLabel('Tên ứng dụng',{exact:true}).waitFor();
+ await mkdir('artifacts',{recursive:true});
+ await page.screenshot({path:'artifacts/settings-desktop.png',fullPage:true});
+ await page.getByRole('button',{name:'Nhân viên',exact:true}).click();
+ await page.getByRole('button',{name:'Tạo tài khoản',exact:true}).click();
+ await page.getByRole('dialog').getByLabel('Tên đăng nhập',{exact:true}).fill('test.editor');
+ if(!await page.getByRole('dialog').getByLabel('Tên đăng nhập',{exact:true}).evaluate(e=>e.checkValidity()))throw new Error('Username form validation failed');
+ await page.getByRole('dialog').getByRole('button',{name:'Đóng',exact:true}).click();
+ await page.getByRole('button',{name:'Nguồn ảnh',exact:true}).click();
+ await page.getByRole('button',{name:'Chọn thư mục để cấp quyền'}).click();
+ await page.locator('.directory-browser').waitFor();
+ await page.setViewportSize({width:390,height:844});
+ await page.getByRole('button',{name:'Tài khoản của tôi',exact:true}).click();
+ await page.getByLabel('Mật khẩu hiện tại',{exact:true}).waitFor();
+ await page.screenshot({path:'artifacts/settings-mobile.png',fullPage:true});
+ if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth))throw new Error('Mobile horizontal overflow');
+ if(errors.length)throw new Error(errors.join('\n'));
+ console.log('PASS: login, settings, employee dialog, source browser, mobile account; no page errors.');
+} finally {await browser.close();}

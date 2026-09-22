@@ -1,0 +1,11 @@
+**/node_modules
+**/.next
+.runtime
+data
+cache
+artifacts
+test-results
+.env
+*.zip
+.git
+NAS-ACCESS.txt

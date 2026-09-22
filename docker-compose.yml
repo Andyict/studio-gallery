@@ -1,0 +1,99 @@
+name: nas-photo-proofing
+services:
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    init: true
+    user: "${PUID:-1026}:${PGID:-100}"
+    environment:
+      APP_NAME: ${APP_NAME:-Studio Gallery}
+      # Optional: omit this to create the first administrator in the browser.
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:?Set PUBLIC_ORIGIN in .env}
+      PHOTO_ROOT: /photos
+      PHOTO_SOURCE_LABEL: ${PHOTO_SOURCE}
+      DATA_DIR: /data
+      CACHE_DIR: /cache
+      NODE_OPTIONS: --max-old-space-size=384
+      APP_VERSION: ${APP_VERSION:-0.1.0}
+      UPDATE_REPO: ${UPDATE_REPO:-}
+      UPDATE_COMMAND: ${UPDATE_COMMAND:-}
+    volumes:
+      - type: bind
+        source: ${PHOTO_SOURCE:?Set PHOTO_SOURCE in .env}
+        target: /photos
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DATA_PATH:?Set DATA_PATH in .env}
+        target: /data
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CACHE_PATH:?Set CACHE_PATH in .env}
+        target: /cache
+        bind:
+          create_host_path: false
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 1g
+    cpu_shares: 768
+    pids_limit: 128
+    stop_grace_period: 90s
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3211/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: json-file
+      options: {max-size: 10m, max-file: "3"}
+  web:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    restart: unless-stopped
+    init: true
+    depends_on:
+      api: {condition: service_healthy}
+    environment:
+      NODE_OPTIONS: --max-old-space-size=384
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 512m
+    cpu_shares: 512
+    pids_limit: 64
+    logging:
+      driver: json-file
+      options: {max-size: 10m, max-file: "3"}
+  proxy:
+    image: nginx:stable-alpine
+    restart: unless-stopped
+    user: "101:101"
+    entrypoint: [nginx, -g, "daemon off;"]
+    depends_on: [web, api]
+    ports:
+      - "${HTTP_PORT:-8088}:8080"
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/nginx.conf:ro
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 64m
+    cpu_shares: 256
+    pids_limit: 32
+    logging:
+      driver: json-file
+      options: {max-size: 10m, max-file: "3"}
+
