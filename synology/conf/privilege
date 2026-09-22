@@ -1,7 +1,5 @@
 {
   "defaults": {
-    "run-as": "package",
-    "support-acl": true
-  },
-  "ctrl-script": "scripts/start-stop-status"
+    "run-as": "package"
+  }
 }
