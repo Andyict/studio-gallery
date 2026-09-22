@@ -1,0 +1,15 @@
+#!/bin/sh
+set -eu
+PKG_VAR="/var/packages/StudioGallery/var"
+mkdir -p "$PKG_VAR/data" "$PKG_VAR/cache"
+if [ ! -f "$PKG_VAR/.env" ]; then
+  cat > "$PKG_VAR/.env" <<'EOF'
+PHOTO_SOURCE=
+DATA_PATH=/var/packages/StudioGallery/var/data
+CACHE_PATH=/var/packages/StudioGallery/var/cache
+PUBLIC_ORIGIN=http://localhost:8088
+APP_NAME=Studio Gallery
+ADMIN_PASSWORD=
+EOF
+fi
+chmod 600 "$PKG_VAR/.env"

@@ -1,0 +1,40 @@
+name: studio-gallery
+services:
+  api:
+    image: ghcr.io/andyict/studio-gallery-api:latest
+    restart: unless-stopped
+    init: true
+    user: "${PUID:-1026}:${PGID:-100}"
+    environment:
+      APP_NAME: ${APP_NAME:-Studio Gallery}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:?Set PUBLIC_ORIGIN}
+      PHOTO_ROOT: /photos
+      DATA_DIR: /data
+      CACHE_DIR: /cache
+    volumes:
+      - type: bind
+        source: ${PHOTO_SOURCE:?Set PHOTO_SOURCE}
+        target: /photos
+        read_only: true
+      - type: bind
+        source: ${DATA_PATH:?Set DATA_PATH}
+        target: /data
+      - type: bind
+        source: ${CACHE_PATH:?Set CACHE_PATH}
+        target: /cache
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3211/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+  web:
+    image: ghcr.io/andyict/studio-gallery-web:latest
+    restart: unless-stopped
+    depends_on:
+      api: {condition: service_healthy}
+  proxy:
+    image: nginx:stable-alpine
+    restart: unless-stopped
+    depends_on: [web, api]
+    ports:
+      - "${HTTP_PORT:-8088}:8080"
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/nginx.conf:ro

@@ -35,7 +35,8 @@ export default function SystemSettings({
     [audit, setAudit] = useState<any[]>([]),
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
-    [busy, setBusy] = useState(false);
+    [busy, setBusy] = useState(false),
+    [savedSettings, setSavedSettings] = useState<any>(null);
   const [edit, setEdit] = useState<any>(null),
     [reset, setReset] = useState<any>(null),
     [newPassword, setNewPassword] = useState(""),
@@ -52,6 +53,7 @@ export default function SystemSettings({
         api("/admin/sources"),
       ]);
       setData(d);
+      setSavedSettings(JSON.stringify(d.settings));
       setUsers(u);
       setAudit(a);
       setSources(src);
@@ -87,6 +89,7 @@ export default function SystemSettings({
     setData((d: any) => ({ ...d, settings: { ...d.settings, [k]: v } }));
   }
   const s = data?.settings;
+  const dirty = Boolean(s && savedSettings && JSON.stringify(s) !== savedSettings);
   const tabs =
     me.role === "admin"
       ? [
@@ -276,13 +279,13 @@ export default function SystemSettings({
               <label>
                 Lịch quét cron
                 <input
-                  value={s.defaultCron}
-                  onChange={(e) => update("defaultCron", e.target.value)}
-                  placeholder="0 3 * * *"
+                  type="time"
+                  value={(() => { const m = String(s.defaultCron || "").match(/^(\d{1,2})\s+(\d{1,2})\s+\*/); return m ? `${String(Number(m[2])).padStart(2,"0")}:${String(Number(m[1])).padStart(2,"0")}` : ""; })()}
+                  onChange={(e) => { const [hour, minute] = e.target.value.split(":"); update("defaultCron", `${Number(minute)} ${Number(hour)} * * *`); }}
                 />
               </label>
               <small className="muted">
-                Để trống để chỉ đồng bộ thủ công. 0 3 * * * = 03:00 mỗi ngày.
+                Chọn giờ chạy quét tự động mỗi ngày. Để trống nếu chỉ muốn đồng bộ thủ công.
               </small>
               <label>
                 Múi giờ
@@ -355,7 +358,7 @@ export default function SystemSettings({
               </label>
             </>
           )}
-          <button className="primary" disabled={busy}>
+          <button className="primary" disabled={busy || !dirty}>
             <Save size={17} />
             Lưu cài đặt
           </button>
@@ -581,6 +584,14 @@ export default function SystemSettings({
                             }}
                           >
                             Đặt lại mật khẩu
+                          </button>
+                        )}
+                        {u.id === me.id && (
+                          <button
+                            disabled={busy}
+                            onClick={() => setTab("account")}
+                          >
+                            Đổi mật khẩu
                           </button>
                         )}
                       </div>

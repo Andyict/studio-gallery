@@ -1,0 +1,27 @@
+#!/bin/sh
+set -eu
+PKG="StudioGallery"
+PKG_VAR="/var/packages/$PKG/var"
+COMPOSE="$PKG_VAR/docker-compose.yml"
+ENV_FILE="$PKG_VAR/.env"
+DOCKER="/var/packages/ContainerManager/target/usr/bin/docker-compose"
+
+case "${1:-}" in
+  start)
+    [ -x "$DOCKER" ] || exit 1
+    [ -f "$COMPOSE" ] || exit 1
+    cd "$PKG_VAR"
+    "$DOCKER" --env-file "$ENV_FILE" up -d
+    ;;
+  stop)
+    [ -f "$COMPOSE" ] || exit 0
+    cd "$PKG_VAR"
+    "$DOCKER" --env-file "$ENV_FILE" down
+    ;;
+  status)
+    [ -f "$COMPOSE" ] || exit 3
+    cd "$PKG_VAR"
+    "$DOCKER" --env-file "$ENV_FILE" ps --status running --quiet | grep -q .
+    ;;
+  *) exit 2 ;;
+esac

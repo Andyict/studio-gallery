@@ -45,6 +45,8 @@ export default function Admin() {
     [systemOpen, setSystemOpen] = useState(false);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatBody, setChatBody] = useState("");
   const [settingsTab, setSettingsTab] = useState("general");
   const [brand, setBrand] = useState("Studio Gallery"),
     [auth, setAuth] = useState(false),
@@ -453,6 +455,11 @@ export default function Admin() {
           <FolderOpen size={18} />
           Duyệt thư mục
         </button>
+        <button className={`nav-item ${chatOpen ? "active" : ""}`} onClick={() => { setChatOpen(true); setSystemOpen(false); setSelected(""); }}>
+          <MessageCircle size={18} />
+          Tin nhắn album
+          <span className="nav-count">{projects.reduce((n,p)=>n+(p.open_comment_count||0),0)}</span>
+        </button>
         <button
           className={`nav-item ${!systemOpen && !selected && dashboardTab === "shared" ? "active" : ""}`}
           onClick={() => {
@@ -600,6 +607,12 @@ export default function Admin() {
               }}
             />
           </>
+        ) : chatOpen ? (
+          <section className="panel chat-placeholder">
+            <div className="panel-title"><div><span className="eyebrow">ALBUM CHAT</span><h2>Trao đổi với khách hàng</h2></div><button onClick={() => setChatOpen(false)}>Đóng</button></div>
+            <p className="muted">Mở một album trong mục Quản lý album để xem và trả lời cuộc trò chuyện theo album.</p>
+            <button className="primary" onClick={() => { setChatOpen(false); setDashboardTab("shared"); }}>Mở quản lý album <ArrowRight size={16}/></button>
+          </section>
         ) : (
           <>
             <section
@@ -938,6 +951,9 @@ export default function Admin() {
                       {name}
                     </button>
                   ))}
+                  <button className="primary share-tab-action" onClick={() => setShareOpen(true)}>
+                    <LinkIcon size={15} /> Tạo link chia sẻ
+                  </button>
                 </nav>}
                 {tab === "overview" && (
                   <div className={`overview-grid ${browseOnly ? "browse-only" : ""}`}>

@@ -1,0 +1,3 @@
+#!/bin/sh
+set -eu
+/var/packages/StudioGallery/scripts/start-stop-status stop || true

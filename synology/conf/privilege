@@ -1,0 +1,7 @@
+{
+  "defaults": {
+    "run-as": "root",
+    "support-acl": true
+  },
+  "ctrl-script": "scripts/start-stop-status"
+}

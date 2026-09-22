@@ -239,6 +239,7 @@ button, input, textarea, select { font-family: inherit; }
 .admin-tabs { border-bottom: 0; padding: 4px; border-radius: 12px; background: #e9ede5; width: fit-content; max-width: 100%; gap: 4px; overflow-x: auto; }
 .admin-tabs button { padding: 10px 16px; border: 0; border-radius: 8px; white-space: nowrap; }
 .admin-tabs button.active { background: #fff; border-radius: 8px; color: var(--green); box-shadow: 0 2px 5px #243a2910; }
+.admin-tabs .share-tab-action { margin-left: 8px; padding: 9px 13px; background: #24664f; color: #fff; }
 .favorite-toolbar { background: #fafbf8; padding: 18px; }
 .favorite-files.grid .favorite-file { padding: 8px; border-radius: 12px; }
 .favorite-file:hover { background: #f1f5ed; }
