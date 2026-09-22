@@ -39,3 +39,23 @@ jobs:
           file: frontend/Dockerfile
           push: true
           tags: ${{ steps.meta-web.outputs.tags }}
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build SPK
+        run: |
+          set -e
+          mkdir -p stage/conf stage/scripts stage/var/deploy
+          cp synology/INFO stage/INFO
+          cp synology/conf/privilege stage/conf/
+          cp synology/scripts/* stage/scripts/
+          cp docker-compose.registry.yml stage/var/docker-compose.yml
+          cp deploy/nginx.conf stage/var/deploy/nginx.conf
+          tar -czf stage/package.tgz -C stage/var .
+          rm -rf stage/var
+          tar -cf StudioGallery-0.1.0-noarch.spk -C stage INFO conf scripts package.tgz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: StudioGallery-0.1.0-noarch
+          path: StudioGallery-0.1.0-noarch.spk
