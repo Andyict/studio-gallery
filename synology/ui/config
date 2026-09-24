@@ -1,12 +1,20 @@
 {
   ".url": {
-    "studio-gallery": {
+    "studio-manager": {
     "type": "url",
     "icon": "images/icon_{0}.png",
     "title": "Studio Gallery",
     "desc": "Photo proofing and studio manager",
     "url": "http://192.168.50.246:3215/",
     "allUsers": true
+    },
+    "studio-console": {
+      "type": "url",
+      "icon": "images/console_{0}.png",
+      "title": "Studio Gallery Console",
+      "desc": "Quản lý quyền truy cập thư mục ảnh",
+      "url": "http://192.168.50.246:3215/manager",
+      "allUsers": true
     }
   }
 }

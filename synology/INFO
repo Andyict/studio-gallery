@@ -1,6 +1,6 @@
 package="StudioGallery"
 displayname="Studio Gallery"
-version="0.2.0-9"
+version="0.2.0-10"
 arch="noarch"
 os_min_ver="7.0-40000"
 description="Self-hosted photo proofing and client gallery for Synology NAS"
