@@ -1,7 +1,11 @@
 #!/bin/sh
 set -eu
 PKG_VAR="/var/packages/StudioGallery/var"
+PKG_TARGET="/var/packages/StudioGallery/target"
 mkdir -p "$PKG_VAR/data" "$PKG_VAR/cache"
+cp "$PKG_TARGET/docker-compose.yml" "$PKG_VAR/docker-compose.yml"
+mkdir -p "$PKG_VAR/deploy"
+cp "$PKG_TARGET/deploy/nginx.conf" "$PKG_VAR/deploy/nginx.conf"
 if [ ! -f "$PKG_VAR/.env" ]; then
   cat > "$PKG_VAR/.env" <<'EOF'
 PHOTO_SOURCE=

@@ -46,18 +46,17 @@ jobs:
       - name: Build SPK
         run: |
           set -e
-          mkdir -p stage/conf stage/scripts stage/var/deploy
+          mkdir -p stage/conf stage/scripts stage/deploy
           cp synology/INFO stage/INFO
           cp synology/conf/privilege stage/conf/
           cp synology/scripts/* stage/scripts/
-          cp docker-compose.registry.yml stage/var/docker-compose.yml
-          cp deploy/nginx.conf stage/var/deploy/nginx.conf
+          cp docker-compose.registry.yml stage/docker-compose.yml
+          cp deploy/nginx.conf stage/deploy/nginx.conf
           # DSM expects classic USTAR archives; GNU tar defaults to pax on
           # newer runners, which Package Center rejects as an invalid SPK.
-          tar --format=ustar -czf stage/package.tgz -C stage/var .
-          rm -rf stage/var
-          tar --format=ustar -cf StudioGallery-0.1.0-3-noarch.spk -C stage INFO conf scripts package.tgz
+          tar --format=ustar -czf stage/package.tgz -C stage docker-compose.yml deploy
+          tar --format=ustar -cf StudioGallery-0.1.0-4-noarch.spk -C stage INFO conf scripts package.tgz
       - uses: actions/upload-artifact@v4
         with:
-          name: StudioGallery-0.1.0-3-noarch
-          path: StudioGallery-0.1.0-3-noarch.spk
+          name: StudioGallery-0.1.0-4-noarch
+          path: StudioGallery-0.1.0-4-noarch.spk
