@@ -1,15 +1,19 @@
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $stage = Join-Path $root '.spk-stage'
-$out = Join-Path $root 'StudioGallery-0.1.0-5-noarch.spk'
+$out = Join-Path $root 'StudioGallery-0.2.0-1-noarch.spk'
 Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
-New-Item -ItemType Directory -Force -Path "$stage\conf","$stage\scripts","$stage\deploy" | Out-Null
+New-Item -ItemType Directory -Force -Path "$stage\conf","$stage\scripts","$stage\backend","$stage\frontend" | Out-Null
 Copy-Item "$root\synology\INFO" "$stage\INFO"
 Copy-Item "$root\synology\conf\privilege" "$stage\conf"
 Copy-Item "$root\synology\scripts\*" "$stage\scripts"
-Copy-Item "$root\docker-compose.registry.yml" "$stage\docker-compose.yml"
-Copy-Item "$root\deploy\nginx.conf" "$stage\deploy\nginx.conf"
+Copy-Item "$root\backend\src" "$stage\backend\src" -Recurse
+Copy-Item "$root\backend\node_modules" "$stage\backend\node_modules" -Recurse
+Copy-Item "$root\backend\package.json" "$stage\backend\package.json"
+Copy-Item "$root\frontend\.next\standalone\*" "$stage\frontend" -Recurse
+Copy-Item "$root\frontend\.next\static" "$stage\frontend\frontend\.next\static" -Recurse
+if (Test-Path "$root\frontend\public") { Copy-Item "$root\frontend\public" "$stage\frontend\frontend\public" -Recurse }
 Remove-Item $out -Force -ErrorAction SilentlyContinue
-tar --format=ustar -czf "$stage\package.tgz" -C $stage docker-compose.yml deploy
+tar --format=ustar -czf "$stage\package.tgz" -C $stage backend frontend
 tar --format=ustar -cf $out -C $stage INFO conf scripts package.tgz
 Get-Item $out | Select-Object FullName,Length
