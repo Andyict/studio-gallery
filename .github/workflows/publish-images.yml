@@ -56,8 +56,8 @@ jobs:
           # newer runners, which Package Center rejects as an invalid SPK.
           tar --format=ustar -czf stage/package.tgz -C stage/var .
           rm -rf stage/var
-          tar --format=ustar -cf StudioGallery-0.1.0-2-noarch.spk -C stage INFO conf scripts package.tgz
+          tar --format=ustar -cf StudioGallery-0.1.0-3-noarch.spk -C stage INFO conf scripts package.tgz
       - uses: actions/upload-artifact@v4
         with:
-          name: StudioGallery-0.1.0-2-noarch
-          path: StudioGallery-0.1.0-2-noarch.spk
+          name: StudioGallery-0.1.0-3-noarch
+          path: StudioGallery-0.1.0-3-noarch.spk
