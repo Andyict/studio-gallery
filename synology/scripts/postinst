@@ -13,4 +13,5 @@ APP_NAME="Studio Gallery"
 ADMIN_PASSWORD=
 EOF
 fi
+sed -i 's/^APP_NAME=.*/APP_NAME="Studio Gallery"/' "$PKG_VAR/.env"
 chmod 600 "$PKG_VAR/.env"
