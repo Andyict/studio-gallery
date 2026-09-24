@@ -14,7 +14,7 @@ case "${1:-}" in
     set -a; . "$ENV_FILE"; set +a
     export PORT=3211 PHOTO_ROOT="${PHOTO_SOURCE:-/volume1/Studio}" DATA_DIR="$PKG_VAR/data" CACHE_DIR="$PKG_VAR/cache" PUBLIC_ORIGIN="${PUBLIC_ORIGIN:-http://$(hostname -i | awk '{print $1}'):3210}"
     cd "$PKG_TARGET/backend"; nohup "$NODE" src/server.mjs > "$PKG_VAR/logs/backend.log" 2>&1 & echo $! > "$PKG_VAR/backend.pid"
-    export HOSTNAME=0.0.0.0 PORT=3210 API_INTERNAL_URL=http://127.0.0.1:3211
+    export HOSTNAME=0.0.0.0 PORT=3215 API_INTERNAL_URL=http://127.0.0.1:3211
     cd "$PKG_TARGET/frontend/frontend"; nohup "$NODE" server.js > "$PKG_VAR/logs/frontend.log" 2>&1 & echo $! > "$PKG_VAR/frontend.pid"
     ;;
   stop)
