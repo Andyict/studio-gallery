@@ -9,7 +9,7 @@ PHOTO_SOURCE=/volume1/Studio
 DATA_PATH=/var/packages/StudioGallery/var/data
 CACHE_PATH=/var/packages/StudioGallery/var/cache
 PUBLIC_ORIGIN=http://localhost:8088
-APP_NAME=Studio Gallery
+APP_NAME="Studio Gallery"
 ADMIN_PASSWORD=
 EOF
 fi
