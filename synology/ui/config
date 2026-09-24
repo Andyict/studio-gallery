@@ -1,0 +1,10 @@
+{
+  "app": {
+    "type": "url",
+    "icon": "images/icon_{0}.png",
+    "title": "Studio Gallery",
+    "desc": "Photo proofing and studio manager",
+    "url": "http://127.0.0.1:3215/",
+    "allUsers": true
+  }
+}
