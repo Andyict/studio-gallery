@@ -1,7 +1,7 @@
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $stage = Join-Path $root '.spk-stage'
-$out = Join-Path $root 'StudioGallery-0.2.0-7-noarch.spk'
+$out = Join-Path $root 'StudioGallery-0.2.0-8-noarch.spk'
 Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path "$stage\conf","$stage\scripts","$stage\backend","$stage\frontend","$stage\icons","$stage\ui\images" | Out-Null
 Copy-Item "$root\synology\INFO" "$stage\INFO"

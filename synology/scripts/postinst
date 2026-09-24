@@ -15,3 +15,5 @@ EOF
 fi
 sed -i 's/^APP_NAME=.*/APP_NAME="Studio Gallery"/' "$PKG_VAR/.env"
 chmod 600 "$PKG_VAR/.env"
+mkdir -p /usr/syno/synoman/webman/3rdparty
+ln -sfn "$PKG_TARGET/ui" /usr/syno/synoman/webman/3rdparty/StudioGallery
