@@ -8,7 +8,7 @@ if [ ! -f "$PKG_VAR/.env" ]; then
 PHOTO_SOURCE=/volume1/Studio
 DATA_PATH=/var/packages/StudioGallery/var/data
 CACHE_PATH=/var/packages/StudioGallery/var/cache
-PUBLIC_ORIGIN=http://localhost:8088
+PUBLIC_ORIGIN=http://192.168.50.246:3215
 APP_NAME="Studio Gallery"
 ADMIN_PASSWORD=
 EOF
