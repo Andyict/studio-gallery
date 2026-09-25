@@ -2,10 +2,10 @@
   "packages": [
     {
       "package": "StudioGallery",
-      "version": "0.2.0-14",
+      "version": "0.2.0-15",
       "dname": "Studio Gallery",
       "desc": "Native photo proofing and studio gallery for Synology NAS.",
-      "link": "https://raw.githubusercontent.com/Andyict/studio-gallery/main/StudioGallery-0.2.0-14-noarch.spk",
+      "link": "https://raw.githubusercontent.com/Andyict/studio-gallery/main/StudioGallery-0.2.0-15-noarch.spk",
       "thumbnail": [
         "https://raw.githubusercontent.com/Andyict/studio-gallery/main/synology/icons/manager-72.png"
       ],
@@ -22,9 +22,10 @@
       "distributor_url": "https://github.com/Andyict/studio-gallery",
       "maintainer": "Andyict",
       "maintainer_url": "https://github.com/Andyict/studio-gallery",
-      "md5": "7ad716357c39a3e262a5ec22bf2f7c57",
+      "md5": "3061bd3eaee85338252b2a74ef6056e8",
       "size": 30668800,
       "startable": "yes"
     }
   ]
 }
+
