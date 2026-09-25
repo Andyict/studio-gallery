@@ -1,7 +1,7 @@
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $stage = Join-Path $root '.spk-stage'
-$out = Join-Path $root 'StudioGallery-0.2.0-17-noarch.spk'
+$out = Join-Path $root 'StudioGallery-0.2.0-18-noarch.spk'
 Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path "$stage\conf","$stage\scripts","$stage\backend","$stage\frontend","$stage\icons","$stage\ui\images" | Out-Null
 Copy-Item "$root\synology\INFO" "$stage\INFO"
@@ -31,6 +31,8 @@ Remove-Item $out -Force -ErrorAction SilentlyContinue
 tar --format=ustar -czf "$stage\package.tgz" -C $stage backend frontend icons ui
 tar --format=ustar -cf $out -C $stage INFO conf scripts package.tgz icon.png icon_72.png PACKAGE_ICON.PNG PACKAGE_ICON_256.PNG
 Get-Item $out | Select-Object FullName,Length
+
+
 
 
 
