@@ -1,0 +1,6 @@
+{
+  ".url": {
+    "studio-manager": {"type":"url","icon":"images/icon_{0}.png","title":"Studio Gallery","url":"http://192.168.50.246:3215/","allUsers":true},
+    "studio-console": {"type":"url","icon":"images/console_{0}.png","title":"Studio Gallery Console","url":"http://192.168.50.246:3215/console","allUsers":true}
+  }
+}
