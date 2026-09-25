@@ -9,11 +9,11 @@
     "allUsers": true
     },
     "studio-console": {
-      "type": "url",
+      "type": "app",
       "icon": "images/console_{0}.png",
       "title": "Studio Gallery Console",
       "desc": "Quản lý quyền truy cập thư mục ảnh",
-      "url": "http://192.168.50.246:3215/console",
+      "url": "3rdparty/StudioGallery/index.html",
       "allUsers": true
     }
   }
