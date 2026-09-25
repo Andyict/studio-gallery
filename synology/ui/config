@@ -9,7 +9,7 @@
     "allUsers": true
     },
     "studio-console": {
-      "type": "app",
+      "type": "url",
       "icon": "images/console_{0}.png",
       "title": "Studio Gallery Console",
       "desc": "Quản lý quyền truy cập thư mục ảnh",
