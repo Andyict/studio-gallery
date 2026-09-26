@@ -1,6 +1,13 @@
 {
   ".url": {
-    "studio-manager": {"type":"url","icon":"images/icon_{0}.png","title":"Studio Gallery","url":"http://192.168.50.246:3215/","allUsers":true},
-    "studio-console": {"type":"url","icon":"images/console_{0}.png","title":"Studio Gallery Console","url":"http://192.168.50.246:3215/console","allUsers":true}
+    "studio-manager": {"type":"url","icon":"images/icon_{0}.png","title":"Studio Gallery","url":"http://192.168.50.246:3215/","allUsers":true}
+  },
+  "StudioGallery.js": {
+    "SYNO.SDS.App.StudioGallery.Instance": {
+      "type":"app", "title":"Studio Gallery Console",
+      "appWindow":"SYNO.SDS.App.StudioGallery.Instance", "depend":[],
+      "allUsers":false, "allowMultiInstance":false, "hidden":false,
+      "version":"0.2.0-20", "icon":"images/console_{0}.png"
+    }
   }
 }

@@ -1,8 +1,13 @@
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $stage = Join-Path $root '.spk-stage'
-$out = Join-Path $root 'StudioGallery-0.2.0-19-noarch.spk'
-Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
+$info = Get-Content "$root\synology\INFO" -Raw
+$version = [regex]::Match($info, 'version="([^"]+)"').Groups[1].Value
+if (!$version) { throw 'Missing package version' }
+Get-Content "$root\synology\ui\config" -Raw | ConvertFrom-Json | Out-Null
+$out = Join-Path $root "StudioGallery-$version-noarch.spk"
+if ([IO.Path]::GetFullPath($stage) -ne [IO.Path]::Combine([IO.Path]::GetFullPath($root), '.spk-stage')) { throw 'Invalid staging path' }
+Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path "$stage\conf","$stage\scripts","$stage\backend","$stage\frontend","$stage\icons","$stage\ui\images" | Out-Null
 Copy-Item "$root\synology\INFO" "$stage\INFO"
 Copy-Item "$root\synology\conf\privilege" "$stage\conf"
@@ -20,6 +25,8 @@ Copy-Item "$root\synology\icons\manager-72.png" "$stage\PACKAGE_ICON.PNG"
 Copy-Item "$root\synology\icons\console-256.png" "$stage\icons\console-256.png"
 Copy-Item "$root\synology\icons\console-72.png" "$stage\icons\console-72.png"
 Copy-Item "$root\synology\ui\config" "$stage\ui\config"
+Copy-Item "$root\synology\ui\StudioGallery.js" "$stage\ui\StudioGallery.js"
+Copy-Item "$root\synology\ui\api.cgi" "$stage\ui\api.cgi"
 Copy-Item "$root\synology\ui\index.html" "$stage\ui\index.html"
 Copy-Item "$root\synology\icons\manager-72.png" "$stage\ui\images\icon_72.png"
 Copy-Item "$root\synology\icons\manager-256.png" "$stage\ui\images\icon_256.png"

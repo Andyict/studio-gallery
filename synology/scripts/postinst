@@ -15,3 +15,7 @@ EOF
 fi
 sed -i 's/^APP_NAME=.*/APP_NAME="Studio Gallery"/' "$PKG_VAR/.env"
 chmod 600 "$PKG_VAR/.env"
+set -a; . "$PKG_VAR/.env"; set +a
+/var/packages/Node.js_v22/target/usr/local/bin/node -e 'require("fs").writeFileSync(process.argv[1], JSON.stringify({origin:new URL(process.env.PUBLIC_ORIGIN).origin}))' "$PKG_TARGET/ui/transport.json"
+chmod 644 "$PKG_TARGET/ui/transport.json"
+chmod 755 "$PKG_TARGET/ui/api.cgi"
