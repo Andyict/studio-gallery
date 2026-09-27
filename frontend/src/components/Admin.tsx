@@ -103,6 +103,9 @@ export default function Admin() {
   );
   const [browseOnly, setBrowseOnly] = useState(false);
   const [browserPath, setBrowserPath] = useState("");
+  const [browserData, setBrowserData] = useState<any>(null);
+  const [browserError, setBrowserError] = useState("");
+  const [browserPreview, setBrowserPreview] = useState<any>(null);
   const [folderHistory, setFolderHistory] = useState<string[]>([""]);
   const [folderHistoryIndex, setFolderHistoryIndex] = useState(0);
   const [dashboardView, setDashboardView] = useState<
@@ -124,42 +127,15 @@ export default function Admin() {
       .toLocaleLowerCase("vi")
       .includes(albumSearch.trim().toLocaleLowerCase("vi")),
   );
-  const browserParts = browserPath ? browserPath.split("/") : [];
-  const browserChildren = new Map<string, any>();
-  if (!albumSearch.trim() && dashboardTab === "folders") {
-    for (const album of projects) {
-      const parts = displayProjectPath(String(album.root)).split("/").filter(Boolean);
-      if (
-        browserParts.some((part, index) => parts[index] !== part) ||
-        parts.length <= browserParts.length
-      )
-        continue;
-      const next = parts[browserParts.length];
-      const path = [...browserParts, next].join("/");
-      const directAlbum = parts.length === browserParts.length + 1;
-      const current = browserChildren.get(path);
-      if (!current || directAlbum)
-        browserChildren.set(path, {
-          type: directAlbum ? "album" : "folder",
-          path,
-          name: next.replace(/^\d+[._ -]*/, "").replaceAll("_", " "),
-          album: directAlbum ? album : null,
-        });
-    }
-  }
-  const folderEntries = [...browserChildren.values()].filter(
-    (entry) => entry.type === "folder",
-  );
+  const folderEntries = dashboardTab === "folders" ? (browserData?.folders || []).filter((entry:any) => `${entry.name}`.toLocaleLowerCase("vi").includes(albumSearch.trim().toLocaleLowerCase("vi"))) : [];
+  const fileEntries = dashboardTab === "folders" ? (browserData?.files || []).filter((entry:any) => `${entry.name}`.toLocaleLowerCase("vi").includes(albumSearch.trim().toLocaleLowerCase("vi"))) : [];
   const dashboardAlbums =
     dashboardTab === "shared"
       ? visibleProjects.filter((p) => p.access_count > 0)
-      : albumSearch.trim()
-        ? visibleProjects
-        : [...browserChildren.values()]
-            .filter((entry) => entry.type === "album")
-            .map((entry) => entry.album);
+      : [];
   function navigateFolder(path: string) {
     if (path === browserPath) return;
+    setBrowserData(null);
     setFolderHistory((history) => {
       const next = history.slice(0, folderHistoryIndex + 1);
       if (next[next.length - 1] !== path) next.push(path);
@@ -170,12 +146,14 @@ export default function Admin() {
   }
   function folderBack() {
     if (folderHistoryIndex <= 0) return;
+    setBrowserData(null);
     const index = folderHistoryIndex - 1;
     setFolderHistoryIndex(index);
     setBrowserPath(folderHistory[index]);
   }
   function folderForward() {
     if (folderHistoryIndex >= folderHistory.length - 1) return;
+    setBrowserData(null);
     const index = folderHistoryIndex + 1;
     setFolderHistoryIndex(index);
     setBrowserPath(folderHistory[index]);
@@ -221,6 +199,19 @@ export default function Admin() {
     const t = setInterval(() => refresh().catch(() => {}), 5000);
     return () => clearInterval(t);
   }, [auth, refresh]);
+  useEffect(() => {
+    if (!auth || dashboardTab !== "folders") return;
+    let active = true;
+    const load = async () => {
+      try {
+        const data = await api(`/admin/browse?path=${encodeURIComponent(browserPath)}`);
+        if (active) { setBrowserData(data); setBrowserError(""); }
+      } catch (e:any) { if (active) setBrowserError(e.message); }
+    };
+    void load();
+    const timer = setInterval(() => void load(), 10000);
+    return () => { active = false; clearInterval(timer); };
+  }, [auth, dashboardTab, browserPath]);
   useEffect(() => {
     if (!auth || !selected) return;
     void detail().catch((e) => setError(e.message));
@@ -756,14 +747,14 @@ export default function Admin() {
                       ) : (
                         <>
                           <button onClick={() => navigateFolder("")}>Ảnh</button>
-                          {browserParts.map((part, index) => (
-                            <span key={`${part}-${index}`}>
+                          {(browserData?.breadcrumbs || []).slice(1).map((crumb:any, index:number, crumbs:any[]) => (
+                            <span key={crumb.path}>
                               <ChevronRight size={13} />
                               <button
-                                className={index === browserParts.length - 1 ? "current" : ""}
-                                onClick={() => navigateFolder(browserParts.slice(0, index + 1).join("/"))}
+                                className={index === crumbs.length - 1 ? "current" : ""}
+                                onClick={() => navigateFolder(crumb.path)}
                               >
-                                {part.replace(/^\d+[._ -]*/, "").replaceAll("_", " ")}
+                                {crumb.name}
                               </button>
                             </span>
                           ))}
@@ -780,7 +771,7 @@ export default function Admin() {
                       </h2>
                       <p className="album-results">
                         {dashboardTab === "folders" && !albumSearch.trim()
-                          ? `${folderEntries.length + dashboardAlbums.length} mục`
+                          ? `${folderEntries.length} thư mục · ${fileEntries.length} tệp ảnh/video`
                           : `${dashboardAlbums.length} / ${projects.length} album`}
                       </p>
                     </div>
@@ -801,11 +792,13 @@ export default function Admin() {
                       </div>
                     </div>
                   </div>
-                  {folderEntries.length || dashboardAlbums.length ? (
+                  {browserError && dashboardTab === "folders" && <p className="alert" role="alert">{browserError}</p>}
+                  {dashboardTab === "folders" && browserData?.album && (
+                    <div className="album-browser-open"><button className="primary" onClick={() => { setBrowseOnly(true); setSelected(browserData.album.id); setTab("overview"); }}>Mở quản lý album: {browserData.album.name} <ArrowRight size={15}/></button></div>
+                  )}
+                  {folderEntries.length || fileEntries.length || dashboardAlbums.length ? (
                     <div className={`album-grid ${dashboardView}`}>
-                      {dashboardTab === "folders" &&
-                        !albumSearch.trim() &&
-                        folderEntries.map((entry) => (
+                      {dashboardTab === "folders" && folderEntries.map((entry:any) => (
                           <button
                             className="album-card explorer-folder"
                             key={entry.path}
@@ -813,11 +806,15 @@ export default function Admin() {
                           >
                             <div className="album-card-top"><span className="folder-icon"><Folder size={21} /></span><span className="tag">Thư mục</span></div>
                             <h3>{entry.name}</h3>
-                            <small>/{entry.path}</small>
-                            <div className="album-metrics"><span>{projects.filter((p) => displayProjectPath(String(p.root)).startsWith(`${entry.path}/`)).length} album bên trong</span></div>
                             <div className="album-open">Mở thư mục <ChevronRight size={15} /></div>
                           </button>
                         ))}
+                      {dashboardTab === "folders" && fileEntries.map((entry:any) => (
+                        <button className="album-card browser-file" key={entry.path} onClick={() => setBrowserPreview(entry)}>
+                          <div className="browser-file-image">{entry.thumbnail ? <img src={`/api/admin/browse/thumb?path=${encodeURIComponent(entry.path)}`} alt="" loading="lazy" onError={(e) => { e.currentTarget.style.display = "none"; }} /> : <ImageIcon size={26}/>}</div>
+                          <h3>{entry.name}</h3><small>{entry.type === "video" ? "Video" : "Ảnh"}</small>
+                        </button>
+                      ))}
                       {dashboardAlbums.map((p) => (
                         <AlbumCard
                           album={p}
@@ -836,18 +833,22 @@ export default function Admin() {
                       <h2>
                         {dashboardTab === "shared"
                           ? "Chưa có album được chia sẻ"
-                          : projects.length
-                          ? "Không tìm thấy album"
-                          : "Chưa có album"}
+                          : albumSearch.trim()
+                          ? "Không tìm thấy tệp hoặc thư mục"
+                          : browserPath
+                          ? "Thư mục này đang trống"
+                          : "Chưa bật nguồn ảnh"}
                       </h2>
                       <p>
                         {dashboardTab === "shared"
                           ? "Album sẽ xuất hiện tại đây sau khi bạn tạo link hoặc cấp số điện thoại cho khách."
-                          : projects.length
+                          : albumSearch.trim()
                           ? "Thử tên hoặc từ khóa khác."
-                          : "Vào Quản lý nguồn ảnh, bật thư mục Studio rồi quét nguồn."}
+                          : browserPath
+                          ? "Ảnh và thư mục mới sẽ tự xuất hiện khi được thêm vào NAS."
+                          : "Bật shared folder trong Studio Gallery Console để duyệt ảnh trên NAS."}
                       </p>
-                      {!projects.length && (
+                      {!browserPath && dashboardTab === "folders" && (
                         <button
                           className="primary"
                           onClick={() => {
@@ -880,10 +881,7 @@ export default function Admin() {
                       title="Lên thư mục cha"
                       aria-label="Lên thư mục cha"
                       onClick={() => {
-                        const parent = displayProjectPath(String(project.root))
-                          .split("/")
-                          .slice(0, -1)
-                          .join("/");
+                        const parent = browseOnly ? browserPath.split("/").slice(0, -1).join("/") : "";
                         setBrowserPath(parent);
                         setDashboardTab("folders");
                         setAlbumSearch("");
@@ -916,22 +914,20 @@ export default function Admin() {
                     >
                       Ảnh
                     </button>
-                    {displayProjectPath(String(project.root))
-                      .split("/")
-                      .filter(Boolean)
-                      .map((part, index, parts) => (
-                        <span key={`${part}-${index}`}>
+                    {(browseOnly && browserData?.breadcrumbs?.length ? browserData.breadcrumbs.slice(1) : [{name:displayProjectPath(String(project.root)),path:""}])
+                      .map((crumb:any, index:number, parts:any[]) => (
+                        <span key={`${crumb.path}-${index}`}>
                           <ChevronRight size={13} />
                           <button
                             className={index === parts.length - 1 ? "current" : ""}
                             onClick={() => {
                               if (index === parts.length - 1) return;
-                              setBrowserPath(parts.slice(0, index + 1).join("/"));
+                              setBrowserPath(crumb.path);
                               setDashboardTab("folders");
                               setSelected("");
                             }}
                           >
-                            {part.replace(/^\d{4}-\d{2}-\d{2}[._ -]*/, "").replaceAll("_", " ")}
+                            {crumb.name}
                           </button>
                         </span>
                       ))}
@@ -1619,6 +1615,11 @@ export default function Admin() {
           <Check size={16} />
           {notice}
         </div>
+      )}
+      {browserPreview && (
+        <Modal title={browserPreview.name} close={() => setBrowserPreview(null)}>
+          {browserPreview.thumbnail ? <img style={{maxWidth:"100%",maxHeight:"70vh",objectFit:"contain"}} src={`/api/admin/browse/thumb?size=preview&path=${encodeURIComponent(browserPreview.path)}`} alt={browserPreview.name} /> : <p className="muted">Định dạng này chưa có ảnh xem trước trong trình duyệt. Tệp vẫn nằm trong thư mục nguồn trên NAS.</p>}
+        </Modal>
       )}
       {createOpen && (
         <Modal title="Thêm bộ ảnh từ NAS" close={() => setCreateOpen(false)}>

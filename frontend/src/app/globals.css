@@ -2694,6 +2694,29 @@ td strong {
 .explorer-folder .album-metrics {
   display: block;
 }
+.browser-file-image {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 130px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #edf1ea;
+  color: var(--muted);
+}
+.browser-file-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.browser-file h3 { font-family: inherit; font-size: 13px; font-weight: 600; }
+.album-browser-open { margin: 12px 0; }
+.album-grid.list .browser-file,
+.album-grid.details .browser-file { grid-template-columns: 52px minmax(0, 1fr) 72px; }
+.album-grid.list .browser-file-image,
+.album-grid.details .browser-file-image { width: 42px; height: 42px; }
+.album-grid.list .browser-file > small,
+.album-grid.details .browser-file > small { display: block; }
 .album-grid.list,
 .album-grid.details {
   display: flex;

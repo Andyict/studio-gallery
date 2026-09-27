@@ -15,7 +15,7 @@ function finish(code, data, cookies = []) {
 function fail(code, message) { finish(code, {message}); }
 const route = new URLSearchParams(env.QUERY_STRING || '').get('route') || '';
 const method = env.REQUEST_METHOD || 'GET';
-const allowed = /^(admin\/(me|login|sources|directories|shares)|admin\/sources\/[a-zA-Z0-9-]+(?:\/discover)?)(?:\?[^\r\n]*)?$/.test(route);
+const allowed = /^(admin\/(me|login|sources|directories|shares)|admin\/sources\/[a-zA-Z0-9-]+(?:\/(?:discover|options))?)(?:\?[^\r\n]*)?$/.test(route);
 if (!allowed || !['GET','POST','PATCH'].includes(method)) { fail(404, 'Không tìm thấy API'); }
 else if (method !== 'GET' && (!env.HTTP_ORIGIN || new URL(env.HTTP_ORIGIN).host !== env.HTTP_HOST)) { fail(403, 'Origin không hợp lệ'); }
 else {

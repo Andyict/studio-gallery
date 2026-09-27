@@ -7,8 +7,9 @@ import { z } from 'zod';
 import { readdir, mkdir, stat } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import path from 'node:path';
+import sharp from 'sharp';
 import { openDatabase } from './db.mjs';
-import { id,token,digest,fail,hashPassword,verifyPassword,safePath,cleanRelative,descendant } from './security.mjs';
+import { id,token,digest,fail,hashPassword,verifyPassword,safePath,safeOpen,cleanRelative,descendant } from './security.mjs';
 import { createScanner,nextScan } from './scanner.mjs';
 import { createWorker,cacheFile } from './worker.mjs';
 import { registerDownloads } from './downloads.mjs';
@@ -143,7 +144,7 @@ export async function createApp(options={}) {
   app.get('/api/admin/shares',async req=>{
     const session=authenticate(req,true);if(session.user.role!=='admin')fail(403,'Chỉ quản trị viên được xem shared folder');
     const sources=db.all('SELECT * FROM approved_sources');
-    return (await sharedFolders()).map(s=>{const saved=sources.find(a=>a.relative_path===s.relative_path);return {...s,id:saved?.id,label:s.name,enabled:!!saved?.enabled};});
+    return (await sharedFolders()).map(s=>{const saved=sources.find(a=>a.relative_path===s.relative_path);return {...s,id:saved?.id,label:s.name,enabled:!!saved?.enabled,auto_scan:saved?!!saved.auto_scan:true,scan_depth:saved?.scan_depth||2,last_discovered_at:saved?.last_discovered_at||null};});
   });
   app.get('/api/admin/directories',async req=>{
     authenticate(req,true); const relative=cleanRelative(req.query.path||'');
@@ -151,30 +152,63 @@ export async function createApp(options={}) {
     return {path:relative,folders:entries.filter(e=>e.isDirectory()&&!e.isSymbolicLink()&&!e.name.startsWith('.')&&!['@eaDir','#recycle'].includes(e.name)).map(e=>({name:e.name,path:relative?`${relative}/${e.name}`:e.name}))};
   });
   app.get('/api/admin/sources',async req=>{authenticate(req,true);return db.all('SELECT * FROM approved_sources ORDER BY label,relative_path').map(s=>({...s,enabled:!!s.enabled}));});
+  function topLevelSources(){
+    const sources=db.all('SELECT * FROM approved_sources WHERE enabled=1 ORDER BY label,relative_path');
+    return sources.filter(source=>!sources.some(other=>other.id!==source.id&&descendant(source.relative_path,other.relative_path)));
+  }
+  function browseTarget(value){
+    const parts=cleanRelative(value).split('/');
+    if(parts[0]!=='@source'||!parts[1])fail(400,'Đường dẫn thư mục không hợp lệ');
+    const source=db.get('SELECT * FROM approved_sources WHERE id=? AND enabled=1',parts[1]);
+    if(!source)fail(404,'Nguồn ảnh chưa được bật');
+    const subpath=parts.slice(2).join('/');
+    return {source,subpath,relative:source.relative_path+(subpath?'/'+subpath:'')};
+  }
+  app.get('/api/admin/browse',async req=>{
+    authenticate(req,true);const value=cleanRelative(req.query.path||'');
+    if(!value)return {path:'',folders:topLevelSources().map(s=>({name:s.label,path:'@source/'+s.id})),files:[],album:null,breadcrumbs:[{name:'Ảnh',path:''}]};
+    const {source,relative,subpath}=browseTarget(value),directory=await photoPath(config.photoRoot,relative);
+    const entries=await readdir(directory,{withFileTypes:true});
+    const visible=e=>!e.name.startsWith('.')&&!['@eaDir','#recycle','.snapshot'].includes(e.name)&&!e.isSymbolicLink();
+    const folders=entries.filter(e=>visible(e)&&e.isDirectory()).map(e=>({name:e.name,path:value+'/'+e.name})).sort((a,b)=>a.name.localeCompare(b.name,'vi'));
+    const files=entries.filter(e=>visible(e)&&e.isFile()&&supportedFile(e.name)).map(e=>({name:e.name,path:value+'/'+e.name,type:isVideo({filename:e.name})?'video':'image',thumbnail:/\.(jpe?g|jfif|png|webp|avif|heic|heif|gif|bmp|tiff?)$/i.test(e.name)})).sort((a,b)=>a.name.localeCompare(b.name,'vi'));
+    const breadcrumbs=[{name:'Ảnh',path:''},{name:source.label,path:'@source/'+source.id}];
+    let current='@source/'+source.id;for(const part of subpath.split('/').filter(Boolean)){current+='/'+part;breadcrumbs.push({name:part,path:current});}
+    return {path:value,folders,files,album:db.get('SELECT id,name FROM projects WHERE root=?',relative)||null,breadcrumbs};
+  });
+  app.get('/api/admin/browse/thumb',async(req,reply)=>{
+    authenticate(req,true);const {source,subpath}=browseTarget(req.query.path||'');
+    if(!subpath||!/\.(jpe?g|jfif|png|webp|avif|heic|heif|gif|bmp|tiff?)$/i.test(subpath))fail(415,'Không có ảnh xem trước');
+    const root=await photoPath(config.photoRoot,source.relative_path),handle=await safeOpen(root,subpath);
+    let input;try{const info=await handle.stat();if(info.size>100*1024*1024)fail(413,'Ảnh quá lớn để xem trước');input=await handle.readFile();}finally{await handle.close();}
+    const preview=req.query.size==='preview';
+    try{const image=await sharp(input,{limitInputPixels:100_000_000}).rotate().resize({width:preview?1600:240,height:preview?1600:180,fit:'inside',withoutEnlargement:true}).webp({quality:preview?82:72}).toBuffer();return reply.type('image/webp').send(image);}
+    catch(e){if(e.statusCode)throw e;fail(415,'Định dạng này chưa có ảnh xem trước');}
+  });
   app.post('/api/admin/sources',async(req,reply)=>{
     const session=authenticate(req,true);if(session.user.role!=='admin')fail(403,'Chỉ quản trị viên được quản lý nguồn ảnh');
     const b=parse(z.object({relative_path:z.string().max(1024),label:text}),req.body),relative=cleanRelative(b.relative_path);
     if(!(await stat(await photoPath(config.photoRoot,relative))).isDirectory())fail(400,'Nguồn ảnh không phải thư mục');
     const existing=db.get('SELECT * FROM approved_sources WHERE relative_path=?',relative);
-    if(existing){db.run('UPDATE approved_sources SET label=?,enabled=1 WHERE id=?',b.label,existing.id);return {id:existing.id};}
-    const sid=id();db.run('INSERT INTO approved_sources(id,relative_path,label) VALUES(?,?,?)',sid,relative,b.label);return reply.code(201).send({id:sid});
+    if(existing){db.run('UPDATE approved_sources SET label=?,enabled=1 WHERE id=?',b.label,existing.id);if(existing.auto_scan)queueDiscovery(existing.id);return {id:existing.id};}
+    const sid=id();db.run('INSERT INTO approved_sources(id,relative_path,label) VALUES(?,?,?)',sid,relative,b.label);queueDiscovery(sid);return reply.code(201).send({id:sid});
   });
   app.patch('/api/admin/sources/:id',async req=>{
     const session=authenticate(req,true);if(session.user.role!=='admin')fail(403,'Chỉ quản trị viên được quản lý nguồn ảnh');
     const b=parse(z.object({label:text,enabled:z.boolean()}),req.body),source=db.get('SELECT * FROM approved_sources WHERE id=?',req.params.id);if(!source)fail(404,'Không tìm thấy nguồn ảnh');
     if(!b.enabled&&db.get("SELECT 1 FROM projects WHERE root=? OR substr(root,1,?)=? LIMIT 1",source.relative_path,source.relative_path.length+1,`${source.relative_path}/`))fail(409,'Nguồn đang được một bộ ảnh sử dụng');
-    db.run('UPDATE approved_sources SET label=?,enabled=? WHERE id=?',b.label,+b.enabled,source.id);return {ok:true};
+    db.run('UPDATE approved_sources SET label=?,enabled=? WHERE id=?',b.label,+b.enabled,source.id);if(b.enabled&&!source.enabled&&source.auto_scan)queueDiscovery(source.id);return {ok:true};
   });
-  app.post('/api/admin/sources/:id/discover',async(req,reply)=>{
-    authenticate(req,true);const source=db.get('SELECT * FROM approved_sources WHERE id=? AND enabled=1',req.params.id);if(!source)fail(404,'Nguồn ảnh chưa được bật');
+  async function discoverSource(source,startScan=true){
     const root=await photoPath(config.photoRoot,source.relative_path),entries=await readdir(root,{withFileTypes:true});
-    const folders=entries.filter(e=>e.isDirectory()&&!e.isSymbolicLink()&&!e.name.startsWith('.')&&!['@eaDir','#recycle','.snapshot'].includes(e.name));
+    const visible=e=>e.isDirectory()&&!e.isSymbolicLink()&&!e.name.startsWith('.')&&!['@eaDir','#recycle','.snapshot'].includes(e.name);
+    const folders=entries.filter(visible);
     const candidates=[];
     for(const folder of folders){
       const children=await readdir(path.join(root,folder.name),{withFileTypes:true});
-      const nested=children.filter(e=>e.isDirectory()&&!e.isSymbolicLink()&&!e.name.startsWith('.')&&!['@eaDir','#recycle','.snapshot'].includes(e.name));
+      const nested=children.filter(visible);
       const hasDirectPhotos=children.some(e=>e.isFile()&&supportedFile(e.name));
-      if(nested.length&&!hasDirectPhotos){
+      if(source.scan_depth>=2&&nested.length&&!hasDirectPhotos){
         for(const child of nested)candidates.push(`${folder.name}/${child.name}`);
       }else candidates.push(folder.name);
     }
@@ -183,12 +217,31 @@ export async function createApp(options={}) {
       const relative=source.relative_path?`${source.relative_path}/${candidate}`:candidate;
       const found=db.get('SELECT * FROM projects WHERE root=?',relative);
       if(found){existing.push(found);continue;}
+      if(db.get("SELECT id FROM projects WHERE substr(?,1,length(root)+1)=root||'/' OR substr(root,1,length(?)+1)=?||'/' LIMIT 1",relative,relative,relative))continue;
       const folderName=path.posix.basename(candidate),name=folderName.replace(/^\d{4}-\d{2}-\d{2}[._ -]*/,'').replace(/^\d+[._ -]*/,'').replaceAll('_',' ').replace(/\s+/g,' ').trim()||folderName;
       const pid=id();db.run('INSERT INTO projects(id,name,root,cron,timezone,next_scan) VALUES(?,?,?,?,?,?)',pid,name,relative,config.defaultCron,config.defaultTimezone,nextScan(config.defaultCron,config.defaultTimezone));
       created.push(db.get('SELECT * FROM projects WHERE id=?',pid));
     }
-    const scanStarted=created.length?scanner.batch(created):false;
-    return reply.code(202).send({source:{id:source.id,label:source.label,path:source.relative_path},found:candidates.length,created:created.length,existing:existing.length,scanStarted,albums:created.map(p=>({id:p.id,name:p.name,root:p.root}))});
+    db.run('UPDATE approved_sources SET last_discovered_at=? WHERE id=?',new Date().toISOString(),source.id);
+    const scanProjects=[...created,...existing];
+    const scanStarted=startScan&&scanProjects.length?scanner.batch(scanProjects):false;
+    return {source:{id:source.id,label:source.label,path:source.relative_path},found:candidates.length,created:created.length,existing:existing.length,scanStarted,albums:created.map(p=>({id:p.id,name:p.name,root:p.root})),scanProjects};
+  }
+  function queueDiscovery(sourceId){
+    if(!config.background)return;
+    setImmediate(async()=>{try{const source=topLevelSources().find(s=>s.id===sourceId&&s.auto_scan);if(source)await discoverSource(source);}catch(e){app.log.error({err:e,sourceId},'Automatic source scan failed');}});
+  }
+  app.patch('/api/admin/sources/:id/options',async req=>{
+    const session=authenticate(req,true);if(session.user.role!=='admin')fail(403,'Chỉ quản trị viên được quản lý nguồn ảnh');
+    const options=parse(z.object({auto_scan:z.boolean(),scan_depth:z.union([z.literal(1),z.literal(2)])}),req.body);
+    const source=db.get('SELECT * FROM approved_sources WHERE id=?',req.params.id);if(!source)fail(404,'Không tìm thấy nguồn ảnh');
+    db.run('UPDATE approved_sources SET auto_scan=?,scan_depth=? WHERE id=?',+options.auto_scan,options.scan_depth,source.id);
+    if(options.auto_scan&&source.enabled)queueDiscovery(source.id);
+    return {ok:true};
+  });
+  app.post('/api/admin/sources/:id/discover',async(req,reply)=>{
+    authenticate(req,true);const source=db.get('SELECT * FROM approved_sources WHERE id=? AND enabled=1',req.params.id);if(!source)fail(404,'Nguồn ảnh chưa được bật');
+    const {scanProjects,...result}=await discoverSource(source);return reply.code(202).send(result);
   });
   app.get('/api/admin/update/check',async req=>{
     authenticate(req,true);
@@ -354,7 +407,24 @@ export async function createApp(options={}) {
   app.patch('/api/admin/comments/:id',async req=>{authenticate(req,true);const b=parse(z.object({resolved:z.boolean()}),req.body);db.run('UPDATE comments SET resolved=? WHERE id=?',+b.resolved,req.params.id);return {ok:true};});
   registerDownloads(app,{db,config,authenticate,photoAllowed,listOwned,photosFor,activeLink});
   const timers=[];
-  if(config.background){timers.push(setInterval(()=>scanner.tick(),30_000));timers.push(setInterval(()=>worker.tick()?.catch(e=>app.log.error(e)),500));}
+  if(config.background){
+    timers.push(setInterval(()=>scanner.tick(),30_000));
+    timers.push(setInterval(()=>worker.tick()?.catch(e=>app.log.error(e)),500));
+    let discovering=false;
+    const autoDiscover=async()=>{
+      if(discovering)return;discovering=true;
+      try{
+        const projects=new Map();
+        for(const source of topLevelSources().filter(s=>s.auto_scan)){
+          try{const result=await discoverSource(source,false);for(const project of result.scanProjects)projects.set(project.id,project);}
+          catch(e){app.log.error({err:e,source:source.id},'Automatic source scan failed');}
+        }
+        if(projects.size)scanner.batch([...projects.values()]);
+      }finally{discovering=false;}
+    };
+    timers.push(setInterval(()=>void autoDiscover(),10*60_000));
+    const initial=setTimeout(()=>void autoDiscover(),2000);initial.unref();timers.push(initial);
+  }
   timers.push(setInterval(()=>db.run('DELETE FROM download_tickets WHERE expires_at<?',new Date().toISOString()),60_000));
   for(const t of timers)t.unref();
   app.addHook('onClose',async()=>{timers.forEach(clearInterval);await scanner.stop();await worker.stop();db.close();});

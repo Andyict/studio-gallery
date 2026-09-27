@@ -27,6 +27,8 @@ export async function initializeSettings(db,config) {
     CREATE TABLE IF NOT EXISTS approved_sources (
       id TEXT PRIMARY KEY,relative_path TEXT NOT NULL UNIQUE,label TEXT NOT NULL,enabled INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);`);
+  for(const [column,type] of [['auto_scan','INTEGER NOT NULL DEFAULT 1'],['scan_depth','INTEGER NOT NULL DEFAULT 2'],['last_discovered_at','TEXT']])
+    if(!db.all('PRAGMA table_info(approved_sources)').some(c=>c.name===column))db.raw.exec(`ALTER TABLE approved_sources ADD COLUMN ${column} ${type}`);
   if(!db.all('PRAGMA table_info(sessions)').some(c=>c.name==='user_id')) {
     db.transaction(()=>{
       db.raw.exec('ALTER TABLE sessions ADD COLUMN user_id TEXT REFERENCES staff_users(id)');
@@ -37,7 +39,11 @@ export async function initializeSettings(db,config) {
   // Keep environment-based bootstrap for existing/headless deployments. When no
   // password is supplied the browser onboarding flow creates the first owner.
   if(!db.get('SELECT id FROM staff_users LIMIT 1')&&config.adminPassword)db.run('INSERT INTO staff_users(id,username,name,password_hash,role) VALUES(?,?,?,?,?)',id(),'admin','Chủ studio',await hashPassword(config.adminPassword),'admin');
-  for(const project of db.all('SELECT root,name FROM projects'))db.run('INSERT OR IGNORE INTO approved_sources(id,relative_path,label) VALUES(?,?,?)',id(),project.root,project.name);
+  for(const project of db.all('SELECT root,name FROM projects')){
+    const approved=db.all('SELECT relative_path FROM approved_sources');
+    if(!approved.some(source=>project.root===source.relative_path||project.root.startsWith(source.relative_path+'/')))
+      db.run('INSERT OR IGNORE INTO approved_sources(id,relative_path,label) VALUES(?,?,?)',id(),project.root,project.name);
+  }
   const defaults={brand:config.brand,studioName:'',contactEmail:'',welcomeMessage:'Những khoảnh khắc của bạn. Những lựa chọn của bạn.',sourceLabel:'Nguồn ảnh NAS',defaultCron:'0 3 * * *',defaultTimezone:'Asia/Ho_Chi_Minh',defaultDownloads:true,defaultOriginals:false,defaultExpiryDays:30,maxZipFiles:config.maxZipFiles,maxDownloads:config.maxDownloads,adminSessionHours:12};
   const saved=db.get('SELECT value FROM system_settings WHERE id=1');
   Object.assign(config,defaults,saved?settingsSchema.parse(JSON.parse(saved.value)):{});
