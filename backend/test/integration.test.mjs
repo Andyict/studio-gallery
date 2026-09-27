@@ -60,6 +60,11 @@ test('end-to-end: scan, scope, proofing, previews, ZIP, revocation, missing sour
   assert.equal((await request('POST',`/api/client/photos/${photos[0].id}/comments`,{x:1.2,y:0.3,body:'bad'},client)).statusCode,400);
   assert.equal((await request('POST',`/api/client/photos/${photos[0].id}/comments`,{x:0.25,y:0.5,body:'Làm sáng vùng mặt'},client)).statusCode,200);
   assert.equal((await request('GET',`/api/client/photos/${photos[0].id}/comments`,undefined,other)).json().length,1);
+  const inbox=(await request('GET','/api/admin/inbox',undefined,admin)).json();
+  assert.equal(inbox.some(item=>item.kind==='comment'&&item.photo_id===photos[0].id),true);
+  assert.equal((await request('POST','/api/client/chat',{body:'Khi nào nhận ảnh?'},client)).statusCode,200);
+  assert.equal((await request('GET','/api/admin/inbox',undefined,admin)).json().some(item=>item.kind==='message'&&item.body==='Khi nào nhận ảnh?'),true);
+  assert.equal((await request('GET','/api/admin/projects',undefined,admin)).json().some(item=>item.unread_message_count>0),true);
   const ticket=await request('POST','/api/client/downloads',{list_id:list,original:true},client);assert.equal(ticket.statusCode,200,ticket.body);
   const zip=await request('GET',ticket.json().url,undefined,client);assert.equal(zip.statusCode,200,zip.body.slice(0,100));assert.equal(zip.rawPayload.readUInt32LE(0),0x04034b50);assert.ok(zip.rawPayload.includes(jpg));assert.ok(!zip.rawPayload.includes(Buffer.from('PRIVATE.jpg')));assert.ok(zip.rawPayload.includes(Buffer.from('IMG_00')));
   assert.equal((await request('GET',ticket.json().url,undefined,client)).statusCode,404);

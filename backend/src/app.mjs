@@ -295,6 +295,7 @@ export async function createApp(options={}) {
       (SELECT count(*) FROM client_selections WHERE project_id=p.id) AS favorite_count,
       (SELECT count(*) FROM selection_lists WHERE project_id=p.id AND submitted_at IS NOT NULL) AS submitted_count,
       (SELECT count(*) FROM comments WHERE project_id=p.id AND resolved=0) AS open_comment_count,
+      (SELECT count(*) FROM chat_messages WHERE project_id=p.id AND sender_role='client' AND read_at IS NULL) AS unread_message_count,
       (SELECT max(created_at) FROM comments WHERE project_id=p.id) AS last_client_activity
       FROM projects p ORDER BY created_at DESC`)
       .map(p=>({...p,scan:db.get('SELECT * FROM scan_runs WHERE project_id=? ORDER BY rowid DESC LIMIT 1',p.id)||null}));
@@ -426,6 +427,16 @@ export async function createApp(options={}) {
     authenticate(req,true);const rows=db.all('SELECT c.*,p.filename,p.relative_path,s.name AS client FROM comments c JOIN photos p ON p.id=c.photo_id JOIN sessions s ON s.id=c.session_id WHERE c.project_id=? ORDER BY c.created_at DESC',req.params.id);
     if(req.query.format==='csv')return reply.type('text/csv; charset=utf-8').header('Content-Disposition','attachment; filename="annotations.csv"').send(csv([['File','Path','Client','X','Y','Comment','Resolved'],...rows.map(c=>[c.filename,c.relative_path,c.client,c.x,c.y,c.body,c.resolved])]));return rows;
   });
+  app.get('/api/admin/inbox',async req=>{
+    authenticate(req,true);
+    const notes=db.all(`SELECT c.id,c.project_id,p.name AS project_name,c.photo_id,ph.filename,c.body,c.created_at,s.name AS sender_name,'comment' AS kind
+      FROM comments c JOIN projects p ON p.id=c.project_id JOIN photos ph ON ph.id=c.photo_id JOIN sessions s ON s.id=c.session_id
+      WHERE c.resolved=0 ORDER BY c.created_at DESC LIMIT 200`);
+    const messages=db.all(`SELECT c.id,c.project_id,p.name AS project_name,NULL AS photo_id,NULL AS filename,c.body,c.created_at,c.sender_name,'message' AS kind
+      FROM chat_messages c JOIN projects p ON p.id=c.project_id WHERE c.sender_role='client' AND c.read_at IS NULL
+      ORDER BY c.created_at DESC LIMIT 200`);
+    return [...notes,...messages].sort((a,b)=>b.created_at.localeCompare(a.created_at));
+  });
   app.get('/api/admin/chats',async req=>{authenticate(req,true);return db.all(`SELECT project_id,p.name AS project_name,count(*) AS message_count,max(c.created_at) AS last_message,
     sum(CASE WHEN c.sender_role='client' AND c.read_at IS NULL THEN 1 ELSE 0 END) AS unread_count
     FROM chat_messages c JOIN projects p ON p.id=c.project_id GROUP BY project_id ORDER BY last_message DESC`);});
@@ -444,7 +455,7 @@ export async function createApp(options={}) {
       try{
         const projects=new Map();
         for(const source of topLevelSources().filter(s=>s.auto_scan)){
-          try{const result=await discoverSource(source,false);for(const project of result.scanProjects)projects.set(project.id,project);}
+          try{const result=await discoverSource(source,false);for(const album of result.albums){const project=db.get('SELECT * FROM projects WHERE id=?',album.id);if(project)projects.set(project.id,project);}}
           catch(e){app.log.error({err:e,source:source.id},'Automatic source scan failed');}
         }
         if(projects.size)scanner.batch([...projects.values()]);

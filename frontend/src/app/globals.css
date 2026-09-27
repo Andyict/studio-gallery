@@ -3358,3 +3358,15 @@ td strong {
 .album-grid.grid.file-browser-grid .explorer-folder h3 { margin:0; font-size:13px; overflow:hidden; text-overflow:ellipsis; }
 .album-grid.list.file-browser-grid .explorer-folder,
 .album-grid.details.file-browser-grid .explorer-folder { grid-template-columns:38px minmax(0,1fr); }
+
+.inbox-list { display:grid; gap:10px; }
+.inbox-item { display:flex; justify-content:space-between; align-items:center; gap:20px; padding:14px; border:1px solid var(--line); border-radius:10px; background:#fff; }
+.inbox-item strong,.inbox-item small { display:block; }
+.inbox-item small { color:var(--muted); margin-top:3px; }
+.inbox-item p { margin:8px 0 0; }
+.inbox-actions { display:flex; gap:8px; flex:none; }
+@media(max-width:700px){.inbox-item {display:block}.inbox-actions {margin-top:10px}}
+
+.inbox-thread { margin-top:18px; padding:16px; border:1px solid var(--line); border-radius:10px; }
+.inbox-thread p { padding:10px; background:var(--surface,#fff); border-radius:6px; }
+.inbox-thread form { display:flex; gap:8px; }.inbox-thread input { flex:1; min-width:0; }
