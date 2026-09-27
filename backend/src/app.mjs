@@ -174,7 +174,7 @@ export async function createApp(options={}) {
     const files=entries.filter(e=>visible(e)&&e.isFile()&&supportedFile(e.name)).map(e=>({name:e.name,path:value+'/'+e.name,type:isVideo({filename:e.name})?'video':'image',thumbnail:/\.(jpe?g|jfif|png|webp|avif|heic|heif|gif|bmp|tiff?)$/i.test(e.name)})).sort((a,b)=>a.name.localeCompare(b.name,'vi'));
     const breadcrumbs=[{name:'Ảnh',path:''},{name:source.label,path:'@source/'+source.id}];
     let current='@source/'+source.id;for(const part of subpath.split('/').filter(Boolean)){current+='/'+part;breadcrumbs.push({name:part,path:current});}
-    return {path:value,folders,files,album:db.get('SELECT id,name FROM projects WHERE root=?',relative)||null,breadcrumbs};
+    return {path:value,root:relative,folders,files,album:db.get('SELECT id,name FROM projects WHERE root=?',relative)||null,breadcrumbs};
   });
   const thumbnailJobs=new Map();
   let thumbnailActive=0;const thumbnailWaiters=[];

@@ -132,7 +132,7 @@ export default function Admin() {
   const fileEntries = dashboardTab === "folders" ? (browserData?.files || []).filter((entry:any) => `${entry.name}`.toLocaleLowerCase("vi").includes(albumSearch.trim().toLocaleLowerCase("vi"))) : [];
   const dashboardAlbums =
     dashboardTab === "shared"
-      ? visibleProjects.filter((p) => p.access_count > 0)
+      ? visibleProjects
       : [];
   function navigateFolder(path: string) {
     if (path === browserPath) return;
@@ -481,7 +481,7 @@ export default function Admin() {
           <LinkIcon size={18} />
           Quản lý album
           <span className="nav-count">
-            {projects.filter((p) => p.access_count > 0).length}
+            {projects.length}
           </span>
         </button>
         <button
@@ -793,8 +793,17 @@ export default function Admin() {
                     </div>
                   </div>
                   {browserError && dashboardTab === "folders" && <p className="alert" role="alert">{browserError}</p>}
-                  {dashboardTab === "folders" && browserData?.album && (
-                    <div className="album-browser-open"><button className="primary" onClick={() => { setBrowseOnly(true); setSelected(browserData.album.id); setTab("overview"); }}>Mở quản lý album: {browserData.album.name} <ArrowRight size={15}/></button></div>
+                  {dashboardTab === "folders" && browserPath && browserData && (
+                    <div className="album-browser-open" style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                      {browserData.album ? <>
+                        <button className="primary" onClick={() => {setBrowseOnly(false);setSelected(browserData.album.id);setTab("overview");setShareOpen(true);}}><LinkIcon size={15}/> Tạo link chia sẻ</button>
+                        <button onClick={() => {setBrowseOnly(false);setSelected(browserData.album.id);setTab("settings");}}>Cài đặt album</button>
+                      </> : <button className="primary" disabled={busy} onClick={() => void action(async()=>{
+                        const name=browserData.breadcrumbs.at(-1)?.name || "Album mới";
+                        const created=await api("/admin/projects",json("POST",{name,root:browserData.root}));
+                        await refresh();setBrowseOnly(false);setSelected(created.id);setTab("overview");setNotice("Đã tạo album. Ảnh đang được quét; chọn Tạo link chia sẻ để gửi khách.");
+                      })}><Plus size={15}/> Tạo album từ thư mục này</button>}
+                    </div>
                   )}
                   {folderEntries.length || fileEntries.length || dashboardAlbums.length ? (
                     <div className={`album-grid ${dashboardView} ${dashboardTab === "folders" ? "file-browser-grid" : ""}`}>
