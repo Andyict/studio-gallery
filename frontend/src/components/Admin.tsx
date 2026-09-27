@@ -111,7 +111,7 @@ export default function Admin() {
   const [folderHistoryIndex, setFolderHistoryIndex] = useState(0);
   const [dashboardView, setDashboardView] = useState<
     "grid" | "list" | "details"
-  >("list");
+  >("grid");
   const [favoriteListId, setFavoriteListId] = useState(""),
     [favoriteView, setFavoriteView] = useState<"grid" | "list" | "details">(
       "grid",
