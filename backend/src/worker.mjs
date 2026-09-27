@@ -91,7 +91,8 @@ export function createWorker(db, config, logger) {
       db.run("UPDATE jobs SET status='completed',error=NULL WHERE id=?",job.id);
     } catch(e) {
       logger.warn({photo:job.photo_id,error:e.message},'Preview failed');
-      db.run("UPDATE jobs SET status=CASE WHEN attempts<3 THEN 'pending' ELSE 'failed' END,error=? WHERE id=?",e.message,job.id);
+      const permanent=/Unrecognized option|Unknown encoder|Encoder .* not found|Unsupported image or codec|RAW has no readable/i.test(e.message);
+      db.run("UPDATE jobs SET status=CASE WHEN attempts<3 AND ?=0 THEN 'pending' ELSE 'failed' END,error=? WHERE id=?",+permanent,e.message,job.id);
       db.run("UPDATE photos SET status='failed',error=? WHERE id=? AND version=?",e.message,job.photo_id,job.version);
     }
   }

@@ -196,22 +196,27 @@ export default function Admin() {
   useEffect(() => {
     if (!auth) return;
     void refresh().catch((e) => setError(e.message));
-    const t = setInterval(() => refresh().catch(() => {}), 5000);
+    let loading = false;
+    const t = setInterval(async () => { if (loading || document.hidden) return; loading=true; try { await refresh(); } catch {} finally { loading=false; } }, 15000);
     return () => clearInterval(t);
   }, [auth, refresh]);
   useEffect(() => {
-    if (!auth || dashboardTab !== "folders") return;
+    if (!auth || systemOpen || chatOpen || selected || dashboardTab !== "folders") return;
     let active = true;
+    let loading = false;
+    const controller = new AbortController();
     const load = async () => {
+      if (loading || document.hidden) return;
+      loading = true;
       try {
-        const data = await api(`/admin/browse?path=${encodeURIComponent(browserPath)}`);
+        const data = await api(`/admin/browse?path=${encodeURIComponent(browserPath)}`, {signal:controller.signal});
         if (active) { setBrowserData(data); setBrowserError(""); }
-      } catch (e:any) { if (active) setBrowserError(e.message); }
+      } catch (e:any) { if (active) setBrowserError(e.message); } finally { loading = false; }
     };
     void load();
     const timer = setInterval(() => void load(), 10000);
-    return () => { active = false; clearInterval(timer); };
-  }, [auth, dashboardTab, browserPath]);
+    return () => { active = false; controller.abort(); clearInterval(timer); };
+  }, [auth, dashboardTab, browserPath, systemOpen, chatOpen, selected]);
   useEffect(() => {
     if (!auth || !selected) return;
     void detail().catch((e) => setError(e.message));
@@ -442,8 +447,9 @@ export default function Admin() {
         </a>
         <span className="tiny-label">WORKSPACE</span>
         <button
-          className={`nav-item ${!systemOpen && !selected && dashboardTab === "folders" ? "active" : ""}`}
+          className={`nav-item ${!chatOpen && !systemOpen && !selected && dashboardTab === "folders" ? "active" : ""}`}
           onClick={() => {
+            setChatOpen(false);
             setSystemOpen(false);
             setDashboardTab("folders");
             setBrowseOnly(true);
@@ -460,8 +466,9 @@ export default function Admin() {
           <span className="nav-count">{projects.reduce((n,p)=>n+(p.open_comment_count||0),0)}</span>
         </button>
         <button
-          className={`nav-item ${!systemOpen && !selected && dashboardTab === "shared" ? "active" : ""}`}
+          className={`nav-item ${!chatOpen && !systemOpen && !selected && dashboardTab === "shared" ? "active" : ""}`}
           onClick={() => {
+            setChatOpen(false);
             setSystemOpen(false);
             setDashboardTab("shared");
             setBrowseOnly(false);
@@ -479,6 +486,7 @@ export default function Admin() {
         <button
           className={`nav-item ${systemOpen ? "active" : ""}`}
           onClick={() => {
+            setChatOpen(false);
             setSettingsTab("general");
             setSystemOpen(true);
           }}
@@ -558,7 +566,8 @@ export default function Admin() {
                   title="Trang chủ"
                   aria-label="Trang chủ"
                   onClick={() => {
-                    setSystemOpen(false);
+                    setChatOpen(false);
+            setSystemOpen(false);
                     setSelected("");
                     setDashboardTab("shared");
                     setBrowseOnly(false);
@@ -1626,7 +1635,8 @@ export default function Admin() {
                 setCreateOpen(false);
                 setNewName("");
                 setTab("overview");
-                setSystemOpen(false);
+                setChatOpen(false);
+            setSystemOpen(false);
               });
             }}
           >
