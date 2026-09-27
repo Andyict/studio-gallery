@@ -3353,3 +3353,8 @@ td strong {
 .image-preview-stage { flex:1; min-height:0; overflow:hidden; display:flex; justify-content:center; align-items:center; position:relative; background:#182320; border-radius:8px; touch-action:none; }
 .image-preview-stage img { max-width:100%; max-height:100%; object-fit:contain; flex:none; user-select:none; }
 .preview-status { position:absolute; color:white; padding:20px; }
+
+.album-grid.grid.file-browser-grid .explorer-folder { display:flex; align-items:center; gap:10px; padding:12px; }
+.album-grid.grid.file-browser-grid .explorer-folder h3 { margin:0; font-size:13px; overflow:hidden; text-overflow:ellipsis; }
+.album-grid.list.file-browser-grid .explorer-folder,
+.album-grid.details.file-browser-grid .explorer-folder { grid-template-columns:38px minmax(0,1fr); }

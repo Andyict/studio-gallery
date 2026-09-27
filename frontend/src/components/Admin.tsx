@@ -767,11 +767,11 @@ export default function Admin() {
                       <h2>
                         {dashboardTab === "folders"
                           ? "Thư mục NAS"
-                          : "Album đã tạo link cho khách"}
+                          : "Album"}
                       </h2>
                       <p className="album-results">
                         {dashboardTab === "folders" && !albumSearch.trim()
-                          ? `${folderEntries.length} thư mục · ${fileEntries.length} tệp ảnh/video`
+                          ? [folderEntries.length ? `${folderEntries.length} thư mục` : "", fileEntries.length ? `${fileEntries.length} tệp` : ""].filter(Boolean).join(" · ")
                           : `${dashboardAlbums.length} / ${projects.length} album`}
                       </p>
                     </div>
@@ -813,9 +813,8 @@ export default function Admin() {
                             key={entry.path}
                             onClick={() => navigateFolder(entry.path)}
                           >
-                            <div className="album-card-top"><span className="folder-icon"><Folder size={21} /></span><span className="tag">Thư mục</span></div>
+                            <div className="album-card-top"><span className="folder-icon"><Folder size={21} /></span></div>
                             <h3>{entry.name}</h3>
-                            <div className="album-open">Mở thư mục <ChevronRight size={15} /></div>
                           </button>
                         ))}
                       {dashboardTab === "folders" && fileEntries.map((entry:any) => (
