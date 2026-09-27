@@ -27,6 +27,16 @@ test('enabled source can be browsed as folders and photos, with unlimited recurs
   const thumb=await request('GET',`/api/admin/browse/thumb?path=${encodeURIComponent(ceremony.files[0].path)}`,undefined,cookie);
   assert.equal(thumb.statusCode,200,thumb.body);
   assert.match(thumb.headers['content-type'],/image\/webp/);
+  const thumbUrl=`/api/admin/browse/thumb?path=${encodeURIComponent(ceremony.files[0].path)}`;
+  const unchanged=await app.inject({method:'GET',url:thumbUrl,headers:{cookie,'if-none-match':thumb.headers.etag}});
+  assert.equal(unchanged.statusCode,304);
+  const cached=await request('GET',thumbUrl,undefined,cookie);
+  assert.deepEqual(cached.rawPayload,thumb.rawPayload);
+  await writeFile(path.join(photoRoot,'Studio','Wedding','Ceremony','Day','Originals','photo.jpg'),await sharp(jpg).resize(20,20).jpeg().toBuffer());
+  const changed=await request('GET',thumbUrl,undefined,cookie);
+  assert.equal(changed.statusCode,200);
+  assert.notEqual(changed.headers.etag,thumb.headers.etag);
+
   assert.equal((await request('GET',`/api/admin/browse?path=${encodeURIComponent(base+'/../private')}`,undefined,cookie)).statusCode,400);
   assert.equal((await request('PATCH',`/api/admin/sources/${source.id}/options`,{auto_scan:false,scan_depth:1},cookie)).statusCode,200);
   const discovery=await request('POST',`/api/admin/sources/${source.id}/discover`,{},cookie);

@@ -811,7 +811,7 @@ export default function Admin() {
                         ))}
                       {dashboardTab === "folders" && fileEntries.map((entry:any) => (
                         <button className="album-card browser-file" key={entry.path} onClick={() => setBrowserPreview(entry)}>
-                          <div className="browser-file-image">{entry.thumbnail ? <img src={`/api/admin/browse/thumb?path=${encodeURIComponent(entry.path)}`} alt="" loading="lazy" onError={(e) => { e.currentTarget.style.display = "none"; }} /> : <ImageIcon size={26}/>}</div>
+                          <div className="browser-file-image">{entry.thumbnail ? <img src={`/api/admin/browse/thumb?path=${encodeURIComponent(entry.path)}`} alt="" loading="lazy" decoding="async" width={320} height={240} onError={(e) => { e.currentTarget.style.display = "none"; e.currentTarget.parentElement?.classList.add("thumbnail-unavailable"); }} /> : <ImageIcon size={26}/>}</div>
                           <h3>{entry.name}</h3><small>{entry.type === "video" ? "Video" : "Ảnh"}</small>
                         </button>
                       ))}

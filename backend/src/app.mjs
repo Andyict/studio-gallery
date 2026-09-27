@@ -4,7 +4,7 @@ import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
 import { z } from 'zod';
-import { readdir, mkdir, stat } from 'node:fs/promises';
+import { readdir, mkdir, stat, readFile, writeFile } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import path from 'node:path';
 import sharp from 'sharp';
@@ -176,14 +176,40 @@ export async function createApp(options={}) {
     let current='@source/'+source.id;for(const part of subpath.split('/').filter(Boolean)){current+='/'+part;breadcrumbs.push({name:part,path:current});}
     return {path:value,folders,files,album:db.get('SELECT id,name FROM projects WHERE root=?',relative)||null,breadcrumbs};
   });
-  app.get('/api/admin/browse/thumb',async(req,reply)=>{
-    authenticate(req,true);const {source,subpath}=browseTarget(req.query.path||'');
-    if(!subpath||!/\.(jpe?g|jfif|png|webp|avif|heic|heif|gif|bmp|tiff?)$/i.test(subpath))fail(415,'Không có ảnh xem trước');
+  const thumbnailJobs=new Map();
+  let thumbnailActive=0;const thumbnailWaiters=[];
+  app.get('/api/admin/browse/thumb',{config:{rateLimit:{max:3000,timeWindow:'1 minute'}}},async(req,reply)=>{
+    authenticate(req,true);const {source,subpath,relative}=browseTarget(req.query.path||'');
+    if(!subpath)fail(415,'Không có ảnh xem trước');
+    const preview=req.query.size==='preview',variant=preview?'preview':'thumb';
     const root=await photoPath(config.photoRoot,source.relative_path),handle=await safeOpen(root,subpath);
-    let input;try{const info=await handle.stat();if(info.size>100*1024*1024)fail(413,'Ảnh quá lớn để xem trước');input=await handle.readFile();}finally{await handle.close();}
-    const preview=req.query.size==='preview';
-    try{const image=await sharp(input,{limitInputPixels:100_000_000}).rotate().resize({width:preview?1600:240,height:preview?1600:180,fit:'inside',withoutEnlargement:true}).webp({quality:preview?82:72}).toBuffer();return reply.type('image/webp').send(image);}
-    catch(e){if(e.statusCode)throw e;fail(415,'Định dạng này chưa có ảnh xem trước');}
+    try{
+      const info=await handle.stat();
+      const key=digest(relative+':'+info.size+':'+info.mtimeMs+':'+variant);
+      reply.header('Cache-Control','private, no-cache').header('ETag','"'+key+'"');
+      if(req.headers['if-none-match']==='"'+key+'"')return reply.code(304).send();
+      // Reuse thumbnails produced by the background scanner, including RAW and video posters.
+      const photo=db.get("SELECT photos.* FROM photos JOIN projects ON projects.id=photos.project_id WHERE projects.root || '/' || photos.relative_path=? AND photos.missing=0 AND photos.status='ready' AND photos.bytes=? AND photos.mtime=? LIMIT 1",relative,info.size,info.mtimeMs);
+      if(photo){try{return reply.type('image/webp').send(await readFile(cacheFile(config,photo,variant)));}catch{}}
+      const directory=path.join(config.cacheDir,'browser'),cached=path.join(directory,key+'.webp');
+      try{return reply.type('image/webp').send(await readFile(cached));}catch{}
+      if(info.size>100*1024*1024)fail(413,'Ảnh quá lớn để xem trước');
+      if(!thumbnailJobs.has(key)){
+        const job=(async()=>{
+          if(thumbnailActive>=2)await new Promise(resolve=>thumbnailWaiters.push(resolve));
+          else thumbnailActive++;
+          try{
+            const input=await handle.readFile();
+            const image=await sharp(input,{limitInputPixels:100_000_000,sequentialRead:true}).rotate().resize({width:preview?1600:320,height:preview?1600:240,fit:'inside',withoutEnlargement:true}).webp({quality:preview?82:72}).toBuffer();
+            await mkdir(directory,{recursive:true});await writeFile(cached,image);return image;
+          }finally{const next=thumbnailWaiters.shift();if(next)next();else thumbnailActive--;}
+        })();
+        thumbnailJobs.set(key,job);
+      }
+      try{return reply.type('image/webp').send(await thumbnailJobs.get(key));}
+      catch(e){if(e.statusCode)throw e;fail(415,'Định dạng này chưa có ảnh xem trước');}
+      finally{thumbnailJobs.delete(key);}
+    }finally{await handle.close();}
   });
   app.post('/api/admin/sources',async(req,reply)=>{
     const session=authenticate(req,true);if(session.user.role!=='admin')fail(403,'Chỉ quản trị viên được quản lý nguồn ảnh');
