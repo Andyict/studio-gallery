@@ -200,25 +200,26 @@ export async function createApp(options={}) {
     db.run('UPDATE approved_sources SET label=?,enabled=? WHERE id=?',b.label,+b.enabled,source.id);if(b.enabled&&!source.enabled&&source.auto_scan)queueDiscovery(source.id);return {ok:true};
   });
   async function discoverSource(source,startScan=true){
-    const root=await photoPath(config.photoRoot,source.relative_path),entries=await readdir(root,{withFileTypes:true});
+    const root=await photoPath(config.photoRoot,source.relative_path);
     const visible=e=>e.isDirectory()&&!e.isSymbolicLink()&&!e.name.startsWith('.')&&!['@eaDir','#recycle','.snapshot'].includes(e.name);
-    const folders=entries.filter(visible);
     const candidates=[];
-    for(const folder of folders){
-      const children=await readdir(path.join(root,folder.name),{withFileTypes:true});
-      const nested=children.filter(visible);
-      const hasDirectPhotos=children.some(e=>e.isFile()&&supportedFile(e.name));
-      if(source.scan_depth>=2&&nested.length&&!hasDirectPhotos){
-        for(const child of nested)candidates.push(`${folder.name}/${child.name}`);
-      }else candidates.push(folder.name);
+    const pending=[''];
+    while(pending.length){
+      const candidate=pending.pop();
+      const relative=source.relative_path+(candidate?'/'+candidate:'');
+      // Existing albums already scan their complete subtree; preserve their IDs and links.
+      if(db.get('SELECT id FROM projects WHERE root=?',relative)){candidates.push(candidate);continue;}
+      const children=await readdir(path.join(root,candidate),{withFileTypes:true});
+      if(children.some(e=>e.isFile()&&supportedFile(e.name))){candidates.push(candidate);continue;}
+      for(const child of children.filter(visible))pending.push(candidate?candidate+'/'+child.name:child.name);
     }
     const created=[];const existing=[];
     for(const candidate of candidates){
-      const relative=source.relative_path?`${source.relative_path}/${candidate}`:candidate;
+      const relative=candidate?(source.relative_path?`${source.relative_path}/${candidate}`:candidate):source.relative_path;
       const found=db.get('SELECT * FROM projects WHERE root=?',relative);
       if(found){existing.push(found);continue;}
       if(db.get("SELECT id FROM projects WHERE substr(?,1,length(root)+1)=root||'/' OR substr(root,1,length(?)+1)=?||'/' LIMIT 1",relative,relative,relative))continue;
-      const folderName=path.posix.basename(candidate),name=folderName.replace(/^\d{4}-\d{2}-\d{2}[._ -]*/,'').replace(/^\d+[._ -]*/,'').replaceAll('_',' ').replace(/\s+/g,' ').trim()||folderName;
+      const folderName=path.posix.basename(candidate)||source.label,name=folderName.replace(/^\d{4}-\d{2}-\d{2}[._ -]*/,'').replace(/^\d+[._ -]*/,'').replaceAll('_',' ').replace(/\s+/g,' ').trim()||folderName;
       const pid=id();db.run('INSERT INTO projects(id,name,root,cron,timezone,next_scan) VALUES(?,?,?,?,?,?)',pid,name,relative,config.defaultCron,config.defaultTimezone,nextScan(config.defaultCron,config.defaultTimezone));
       created.push(db.get('SELECT * FROM projects WHERE id=?',pid));
     }
@@ -233,9 +234,9 @@ export async function createApp(options={}) {
   }
   app.patch('/api/admin/sources/:id/options',async req=>{
     const session=authenticate(req,true);if(session.user.role!=='admin')fail(403,'Chỉ quản trị viên được quản lý nguồn ảnh');
-    const options=parse(z.object({auto_scan:z.boolean(),scan_depth:z.union([z.literal(1),z.literal(2)])}),req.body);
+    const options=parse(z.object({auto_scan:z.boolean()}),req.body);
     const source=db.get('SELECT * FROM approved_sources WHERE id=?',req.params.id);if(!source)fail(404,'Không tìm thấy nguồn ảnh');
-    db.run('UPDATE approved_sources SET auto_scan=?,scan_depth=? WHERE id=?',+options.auto_scan,options.scan_depth,source.id);
+    db.run('UPDATE approved_sources SET auto_scan=? WHERE id=?',+options.auto_scan,source.id);
     if(options.auto_scan&&source.enabled)queueDiscovery(source.id);
     return {ok:true};
   });

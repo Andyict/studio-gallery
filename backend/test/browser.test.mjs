@@ -6,12 +6,12 @@ import os from 'node:os';
 import sharp from 'sharp';
 import {createApp} from '../src/app.mjs';
 
-test('enabled source can be browsed as folders and photos, with album discovery limited to selected depth',async t=>{
+test('enabled source can be browsed as folders and photos, with unlimited recursive album discovery',async t=>{
   const root=await mkdtemp(path.join(os.tmpdir(),'studio-browser-'));
   const photoRoot=path.join(root,'photos');
-  await mkdir(path.join(photoRoot,'Studio','Wedding','Ceremony'),{recursive:true});
+  await mkdir(path.join(photoRoot,'Studio','Wedding','Ceremony','Day','Originals'),{recursive:true});
   const jpg=await sharp({create:{width:32,height:24,channels:3,background:'#456789'}}).jpeg().toBuffer();
-  await writeFile(path.join(photoRoot,'Studio','Wedding','Ceremony','photo.jpg'),jpg);
+  await writeFile(path.join(photoRoot,'Studio','Wedding','Ceremony','Day','Originals','photo.jpg'),jpg);
   const app=await createApp({photoRoot,dataDir:path.join(root,'data'),cacheDir:path.join(root,'cache'),adminPassword:'test-password-1234',origin:'http://localhost:3210',background:false,logger:false});
   t.after(async()=>{await app.close();await rm(root,{recursive:true,force:true});});
   const request=(method,url,payload,cookie)=>app.inject({method,url,payload,headers:{origin:'http://localhost:3210',...(cookie?{cookie}:{})}});
@@ -22,7 +22,7 @@ test('enabled source can be browsed as folders and photos, with album discovery 
   const base='@source/'+source.id;
   assert.deepEqual((await request('GET','/api/admin/browse',undefined,cookie)).json().folders.map(f=>f.name),['Studio']);
   assert.deepEqual((await request('GET',`/api/admin/browse?path=${encodeURIComponent(base)}`,undefined,cookie)).json().folders.map(f=>f.name),['Wedding']);
-  const ceremony=(await request('GET',`/api/admin/browse?path=${encodeURIComponent(base+'/Wedding/Ceremony')}`,undefined,cookie)).json();
+  const ceremony=(await request('GET',`/api/admin/browse?path=${encodeURIComponent(base+'/Wedding/Ceremony/Day/Originals')}`,undefined,cookie)).json();
   assert.deepEqual(ceremony.files.map(f=>f.name),['photo.jpg']);
   const thumb=await request('GET',`/api/admin/browse/thumb?path=${encodeURIComponent(ceremony.files[0].path)}`,undefined,cookie);
   assert.equal(thumb.statusCode,200,thumb.body);
@@ -32,7 +32,7 @@ test('enabled source can be browsed as folders and photos, with album discovery 
   const discovery=await request('POST',`/api/admin/sources/${source.id}/discover`,{},cookie);
   assert.equal(discovery.statusCode,202,discovery.body);
   assert.equal(discovery.json().created,1);
-  assert.equal((await request('GET','/api/admin/projects',undefined,cookie)).json()[0].root,'Studio/Wedding');
+  assert.equal((await request('GET','/api/admin/projects',undefined,cookie)).json()[0].root,'Studio/Wedding/Ceremony/Day/Originals');
   await request('POST','/api/admin/sources',{relative_path:'Studio/Wedding',label:'Wedding'},cookie);
   assert.deepEqual((await request('GET','/api/admin/browse',undefined,cookie)).json().folders.map(f=>f.name),['Studio']);
   await request('PATCH',`/api/admin/sources/${source.id}/options`,{auto_scan:false,scan_depth:2},cookie);
