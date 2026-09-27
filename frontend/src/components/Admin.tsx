@@ -39,6 +39,14 @@ import SystemSettings from "./SystemSettings";
 import BrandMark from "./BrandMark";
 import {isVideo} from "@/lib/media";
 
+function displayProjectPath(root: string) {
+  const prefix = "__nas_shares__/";
+  if (!root.startsWith(prefix)) return root;
+  const parts = root.slice(prefix.length).split("/");
+  try { parts[0] = decodeURIComponent(parts[0]); } catch { /* Keep the NAS name as-is. */ }
+  return parts.join("/");
+}
+
 export default function Admin() {
   const [me, setMe] = useState<any>(null),
     [username, setUsername] = useState("admin"),
@@ -91,7 +99,7 @@ export default function Admin() {
     [selectionTitle, setSelectionTitle] = useState("");
   const [albumSearch, setAlbumSearch] = useState("");
   const [dashboardTab, setDashboardTab] = useState<"folders" | "shared">(
-    "shared",
+    "folders",
   );
   const [browseOnly, setBrowseOnly] = useState(false);
   const [browserPath, setBrowserPath] = useState("");
@@ -112,7 +120,7 @@ export default function Admin() {
     [photoFolder, setPhotoFolder] = useState<any>(null);
   const project = projects.find((p) => p.id === selected);
   const visibleProjects = projects.filter((p) =>
-    `${p.name} ${p.root}`
+    `${p.name} ${displayProjectPath(String(p.root))}`
       .toLocaleLowerCase("vi")
       .includes(albumSearch.trim().toLocaleLowerCase("vi")),
   );
@@ -120,7 +128,7 @@ export default function Admin() {
   const browserChildren = new Map<string, any>();
   if (!albumSearch.trim() && dashboardTab === "folders") {
     for (const album of projects) {
-      const parts = String(album.root).split("/").filter(Boolean);
+      const parts = displayProjectPath(String(album.root)).split("/").filter(Boolean);
       if (
         browserParts.some((part, index) => parts[index] !== part) ||
         parts.length <= browserParts.length
@@ -767,7 +775,7 @@ export default function Admin() {
                     <div>
                       <h2>
                         {dashboardTab === "folders"
-                          ? "Thư mục Studio"
+                          ? "Thư mục NAS"
                           : "Album đã tạo link cho khách"}
                       </h2>
                       <p className="album-results">
@@ -806,7 +814,7 @@ export default function Admin() {
                             <div className="album-card-top"><span className="folder-icon"><Folder size={21} /></span><span className="tag">Thư mục</span></div>
                             <h3>{entry.name}</h3>
                             <small>/{entry.path}</small>
-                            <div className="album-metrics"><span>{projects.filter((p) => String(p.root).startsWith(`${entry.path}/`)).length} album bên trong</span></div>
+                            <div className="album-metrics"><span>{projects.filter((p) => displayProjectPath(String(p.root)).startsWith(`${entry.path}/`)).length} album bên trong</span></div>
                             <div className="album-open">Mở thư mục <ChevronRight size={15} /></div>
                           </button>
                         ))}
@@ -872,7 +880,7 @@ export default function Admin() {
                       title="Lên thư mục cha"
                       aria-label="Lên thư mục cha"
                       onClick={() => {
-                        const parent = String(project.root)
+                        const parent = displayProjectPath(String(project.root))
                           .split("/")
                           .slice(0, -1)
                           .join("/");
@@ -908,7 +916,7 @@ export default function Admin() {
                     >
                       Ảnh
                     </button>
-                    {String(project.root)
+                    {displayProjectPath(String(project.root))
                       .split("/")
                       .filter(Boolean)
                       .map((part, index, parts) => (
@@ -1008,7 +1016,7 @@ export default function Admin() {
                           Thêm ảnh vào thư mục trên NAS, studio sẽ tự cập nhật
                           theo lịch bạn đặt.
                         </p>
-                        <div className="source-path">/{project.root}</div>
+                        <div className="source-path">/{displayProjectPath(String(project.root))}</div>
                         <div className="sync-meta">
                           <span>Trạng thái</span>
                           <strong>
@@ -1290,7 +1298,7 @@ export default function Admin() {
                         </strong>
                         <small>
                           {albumPhotos.length} ảnh · /
-                          {photoFolder?.relative_path || project.root}
+                          {photoFolder?.relative_path || displayProjectPath(String(project.root))}
                         </small>
                       </div>
                       <div className="view-switch" aria-label="Chế độ xem">
@@ -1902,7 +1910,7 @@ function AlbumCard({ album, open }: { album: any; open: () => void }) {
         </span>
       </div>
       <h3>{album.name}</h3>
-      <small>/{album.root}</small>
+      <small>/{displayProjectPath(String(album.root))}</small>
       <div className="album-metrics">
         <span>
           <strong>{album.photo_count}</strong> ảnh

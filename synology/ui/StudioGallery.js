@@ -20,7 +20,7 @@
       load:async function(){var self=this;await this.run(async function(){self.user=await self.request('admin/me');self.sources=await self.request('admin/shares');});},
       login:async function(){var self=this;await this.run(async function(){await self.request('admin/login','POST',{username:self.username,password:self.password});self.password='';self.user=await self.request('admin/me');self.sources=await self.request('admin/shares');});},
       toggle:async function(enabled){var self=this,selected=this.selected;await this.run(async function(){if(enabled&&!selected.readable)throw new Error('Chưa có quyền đọc. DSM → Control Panel → Shared Folder → Edit → Permissions → System internal user → StudioGallery → Read only.'); if(!selected.id){await self.request('admin/sources','POST',{label:selected.label,relative_path:selected.relative_path});}else{await self.request('admin/sources/'+selected.id,'PATCH',{label:selected.label,enabled:enabled});}self.sources=await self.request('admin/shares');self.selected=self.sources.find(function(s){return s.relative_path===selected.relative_path;})||null;self.notice=enabled?'Đã bật nguồn ảnh.':'Đã tắt nguồn ảnh.';});},
-      discover:async function(){var self=this;await this.run(async function(){await self.request('admin/sources/'+self.selected.id+'/discover','POST',{});self.notice='Đã quét thư mục nguồn.';});}
+      discover:async function(){var self=this,selected=this.selected;await this.run(async function(){var result=await self.request('admin/sources/'+selected.id+'/discover','POST',{});self.notice='Tìm thấy '+result.found+' album · mới '+result.created+' · đã có '+result.existing+'. Mở Manager → Duyệt thư mục để xem.';});}
     },
     render:function(h){
       var self=this;
