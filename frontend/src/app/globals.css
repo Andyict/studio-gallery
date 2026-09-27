@@ -3312,3 +3312,30 @@ td strong {
 .browser-file-image img { object-fit:contain; width:100%; height:100%; }
 .browser-file-image.thumbnail-unavailable::after { content:'Chưa có ảnh xem trước'; font-size:10px; color:var(--muted); text-align:center; }
 .album-grid.list .thumbnail-unavailable::after { content:'Ảnh'; }
+
+/* Fit thumbnail tiles to the available width instead of stretching three columns. */
+.album-grid.grid.file-browser-grid {
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 10px;
+}
+.album-grid.grid.file-browser-grid .browser-file {
+  padding: 6px;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.album-grid.grid.file-browser-grid .browser-file-image {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 4 / 3;
+  border-radius: 5px;
+}
+.album-grid.grid.file-browser-grid .browser-file h3 {
+  margin: 6px 2px 2px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.album-grid.grid.file-browser-grid .browser-file > small { display: none; }
+.album-grid.grid.file-browser-grid .explorer-folder { padding: 12px; }
+@media (max-width: 480px) {
+  .album-grid.grid.file-browser-grid { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 7px; }
+}

@@ -796,7 +796,7 @@ export default function Admin() {
                     <div className="album-browser-open"><button className="primary" onClick={() => { setBrowseOnly(true); setSelected(browserData.album.id); setTab("overview"); }}>Mở quản lý album: {browserData.album.name} <ArrowRight size={15}/></button></div>
                   )}
                   {folderEntries.length || fileEntries.length || dashboardAlbums.length ? (
-                    <div className={`album-grid ${dashboardView}`}>
+                    <div className={`album-grid ${dashboardView} ${dashboardTab === "folders" ? "file-browser-grid" : ""}`}>
                       {dashboardTab === "folders" && folderEntries.map((entry:any) => (
                           <button
                             className="album-card explorer-folder"
