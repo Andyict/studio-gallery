@@ -11,6 +11,8 @@ Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path "$stage\conf","$stage\scripts","$stage\backend","$stage\frontend","$stage\icons","$stage\ui\images" | Out-Null
 Copy-Item "$root\synology\INFO" "$stage\INFO"
 Copy-Item "$root\synology\conf\privilege" "$stage\conf"
+Get-Content "$root\synology\conf\resource" -Raw | ConvertFrom-Json | Out-Null
+Copy-Item "$root\synology\conf\resource" "$stage\conf"
 Copy-Item "$root\synology\scripts\*" "$stage\scripts"
 Copy-Item "$root\backend\src" "$stage\backend\src" -Recurse
 Copy-Item "$root\backend\node_modules" "$stage\backend\node_modules" -Recurse
