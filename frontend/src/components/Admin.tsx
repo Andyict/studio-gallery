@@ -477,17 +477,7 @@ export default function Admin() {
           </span>
         </button>
         <button
-          className={`nav-item ${systemOpen && settingsTab === "source" ? "active" : ""}`}
-          onClick={() => {
-            setSettingsTab("source");
-            setSystemOpen(true);
-          }}
-        >
-          <Server size={18} />
-          Quản lý nguồn ảnh
-        </button>
-        <button
-          className={`nav-item ${systemOpen && settingsTab !== "source" ? "active" : ""}`}
+          className={`nav-item ${systemOpen ? "active" : ""}`}
           onClick={() => {
             setSettingsTab("general");
             setSystemOpen(true);
