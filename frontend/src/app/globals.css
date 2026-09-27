@@ -3123,13 +3123,25 @@ td strong {
   white-space: normal !important;
 }
 .favorite-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  margin-top: 7px;
+}
+.favorite-notes:empty {
   display: none;
+}
+.favorite-files.list .favorite-notes {
+  grid-column: 2;
+  margin-top: 0;
 }
 .favorite-files.details .favorite-notes {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  min-width: 220px;
+  min-width: 0;
+  margin-top: 0;
 }
 .favorite-files.details .favorite-file {
   grid-template-columns: 52px minmax(130px, 0.8fr) minmax(
@@ -3139,13 +3151,19 @@ td strong {
 }
 .favorite-note {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 7px;
   padding: 5px 7px;
   border-radius: 5px;
   background: #fff8ee;
   color: #79543d;
-  font-size: 9px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.favorite-note > span {
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 .favorite-note.resolved {
   background: #f1f4ef;
@@ -3153,12 +3171,13 @@ td strong {
   text-decoration: line-through;
 }
 .favorite-note button {
+  flex-shrink: 0;
   margin-left: auto;
   padding: 3px 6px;
   border: 0;
   background: transparent;
   color: inherit;
-  font-size: 9px;
+  font-size: 11px;
 }
 .note-count {
   color: #9a684a;

@@ -1532,7 +1532,7 @@ export default function Admin() {
                                 )}
                               </div>
                               <div className="favorite-notes">
-                                {notesFor(photo.id).length ? (
+                                {notesFor(photo.id).length > 0 && (
                                   notesFor(photo.id).map((note) => (
                                     <div
                                       className={`favorite-note ${note.resolved ? "resolved" : ""}`}
@@ -1540,6 +1540,8 @@ export default function Admin() {
                                     >
                                       <span>{note.body}</span>
                                       <button
+                                        type="button"
+                                        onDoubleClick={(e) => e.stopPropagation()}
                                         onClick={(e) => {
                                           e.stopPropagation();
                                           void action(async () => {
@@ -1550,6 +1552,7 @@ export default function Admin() {
                                               }),
                                             );
                                             await detail();
+                                            await refresh();
                                           });
                                         }}
                                       >
@@ -1557,10 +1560,6 @@ export default function Admin() {
                                       </button>
                                     </div>
                                   ))
-                                ) : (
-                                  <span className="muted small">
-                                    Không có ghi chú
-                                  </span>
                                 )}
                               </div>
                               <span className="favorite-detail-notes">
