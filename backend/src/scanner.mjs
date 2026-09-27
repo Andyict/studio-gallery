@@ -92,7 +92,7 @@ export function createScanner(db, config, logger) {
     tick() {
       for (const p of db.all('SELECT * FROM projects WHERE next_scan IS NOT NULL AND next_scan<=?',new Date().toISOString())) {
         if (active.size >= 1) break;
-        this.start(p); db.run('UPDATE projects SET next_scan=? WHERE id=?',nextScan(p.cron,p.timezone),p.id);
+        this.start(p); db.run('UPDATE projects SET next_scan=? WHERE id=?',p.scan_interval_seconds?new Date(Date.now()+p.scan_interval_seconds*1000).toISOString():nextScan(p.cron,p.timezone),p.id);
       }
     }
   };

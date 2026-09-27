@@ -30,7 +30,7 @@ export async function createApp(options={}) {
   const db=openDatabase(path.join(config.dataDir,'gallery.sqlite'));
   const app=Fastify({logger:options.logger??true,bodyLimit:64*1024,trustProxy:false,disableRequestLogging:true});
   await app.register(cookie);
-  await app.register(rateLimit,{max:300,timeWindow:'1 minute'});
+  await app.register(rateLimit,{max:3000,timeWindow:'1 minute'});
   await initializeSettings(db,config);
   for(const [column,type] of [['access_code_hash','TEXT'],['phone_hash','TEXT'],['phone_last4','TEXT']])if(!db.all('PRAGMA table_info(links)').some(c=>c.name===column))db.raw.exec(`ALTER TABLE links ADD COLUMN ${column} ${type}`);
   const dummyHash=await hashPassword(token());
@@ -312,9 +312,10 @@ export async function createApp(options={}) {
     return reply.code(201).send({id:pid});
   });
   app.patch('/api/admin/projects/:id',async req=>{
-    authenticate(req,true);const p=parse(z.object({name:text,cron:z.string().max(80),timezone:z.string().max(80),editor:z.string().trim().max(120).optional(),internal_note:z.string().trim().max(2000).optional()}),req.body);
-    if(!db.get('SELECT id FROM projects WHERE id=?',req.params.id))fail(404,'Không tìm thấy project');
-    db.run('UPDATE projects SET name=?,cron=?,timezone=?,next_scan=?,editor=COALESCE(?,editor),internal_note=COALESCE(?,internal_note) WHERE id=?',p.name,p.cron,p.timezone,nextScan(p.cron,p.timezone),p.editor,p.internal_note,req.params.id);return {ok:true};
+    authenticate(req,true);const p=parse(z.object({name:text,cron:z.string().max(80),timezone:z.string().max(80),editor:z.string().trim().max(120).optional(),internal_note:z.string().trim().max(2000).optional(),scan_interval_seconds:z.number().int().min(10).max(86400).nullable().optional()}),req.body);
+    const current=db.get('SELECT * FROM projects WHERE id=?',req.params.id);if(!current)fail(404,'Không tìm thấy project');
+    const interval=p.scan_interval_seconds===undefined?current.scan_interval_seconds:p.scan_interval_seconds;
+    db.run('UPDATE projects SET name=?,cron=?,timezone=?,scan_interval_seconds=?,next_scan=?,editor=COALESCE(?,editor),internal_note=COALESCE(?,internal_note) WHERE id=?',p.name,p.cron,p.timezone,interval,interval?new Date(Date.now()+interval*1000).toISOString():nextScan(p.cron,p.timezone),p.editor,p.internal_note,req.params.id);return {ok:true};
   });
   app.post('/api/admin/projects/:id/sync',async(req,reply)=>{
     authenticate(req,true);const p=db.get('SELECT * FROM projects WHERE id=?',req.params.id);if(!p)fail(404,'Không tìm thấy project');
@@ -375,7 +376,7 @@ export async function createApp(options={}) {
     const photos=photosFor(s,{...q,limit:q.limit+1}); const more=photos.length>q.limit;
     const link=activeLink(s);return {more,photos:photos.slice(0,q.limit).map(p=>({id:p.id,filename:p.filename,width:p.width,height:p.height,status:p.status,extension:p.extension,folder_id:p.folder_id,selected_in:db.all('SELECT c.list_id FROM client_selections c JOIN selection_lists l ON l.id=c.list_id WHERE c.photo_id=? AND l.project_id=?',p.id,link.project_id).map(x=>x.list_id),comments:db.get('SELECT count(*) AS n FROM comments WHERE photo_id=? AND project_id=?',p.id,link.project_id).n}))};
   });
-  app.get('/api/client/photos/:id/:variant',async(req,reply)=>{
+  app.get('/api/client/photos/:id/:variant',{config:{rateLimit:{max:6000,timeWindow:'1 minute'}}},async(req,reply)=>{
     const s=authenticate(req),photo=photoAllowed(s,req.params.id);
     if(req.params.variant==='video'&&isVideo(photo)){if(photo.status!=='ready')fail(409,'Video đang xử lý');return serveVideo(req,reply,cacheFile(config,photo,'video'));}
     if(!['thumb','preview'].includes(req.params.variant))fail(404,'Không tìm thấy ảnh');
@@ -435,7 +436,7 @@ export async function createApp(options={}) {
   registerDownloads(app,{db,config,authenticate,photoAllowed,listOwned,photosFor,activeLink});
   const timers=[];
   if(config.background){
-    timers.push(setInterval(()=>scanner.tick(),30_000));
+    timers.push(setInterval(()=>scanner.tick(),5000));
     timers.push(setInterval(()=>worker.tick()?.catch(e=>app.log.error(e)),500));
     let discovering=false;
     const autoDiscover=async()=>{

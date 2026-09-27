@@ -81,6 +81,7 @@ export function openDatabase(file) {
   );
   PRAGMA user_version=1;`);
   const projectColumns=db.prepare('PRAGMA table_info(projects)').all().map(column=>column.name);
+  if(!projectColumns.includes('scan_interval_seconds'))db.exec('ALTER TABLE projects ADD COLUMN scan_interval_seconds INTEGER');
   if(!projectColumns.includes('editor'))db.exec("ALTER TABLE projects ADD COLUMN editor TEXT NOT NULL DEFAULT ''");
   if(!projectColumns.includes('internal_note'))db.exec("ALTER TABLE projects ADD COLUMN internal_note TEXT NOT NULL DEFAULT ''");
   // One project represents one customer's album. Merge legacy lists that were

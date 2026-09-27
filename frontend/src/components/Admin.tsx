@@ -95,6 +95,7 @@ export default function Admin() {
     [editEditor, setEditEditor] = useState(""),
     [editNote, setEditNote] = useState(""),
     [cron, setCron] = useState(""),
+    [scanInterval, setScanInterval] = useState<number|null>(null),
     [timezone, setTimezone] = useState("Asia/Ho_Chi_Minh");
   const [selectionPhotos, setSelectionPhotos] = useState<any[] | null>(null),
     [selectionTitle, setSelectionTitle] = useState("");
@@ -230,6 +231,7 @@ export default function Admin() {
       setEditEditor(project.editor || "");
       setEditNote(project.internal_note || "");
       setCron(project.cron);
+      setScanInterval(project.scan_interval_seconds || null);
       setTimezone(project.timezone);
     }
   }, [project?.id]);
@@ -1567,7 +1569,7 @@ export default function Admin() {
                         void action(async () => {
                           await api(
                             `/admin/projects/${selected}`,
-                            json("PATCH", { name: editName, cron, timezone }),
+                            json("PATCH", { name: editName, cron, timezone, scan_interval_seconds:scanInterval, editor:editEditor, internal_note:editNote }),
                           );
                           await refresh();
                           setNotice("Đã lưu cài đặt");
@@ -1582,6 +1584,18 @@ export default function Admin() {
                           onChange={(e) => setEditName(e.target.value)}
                         />
                       </label>
+                      <label>
+                        Chu kỳ quét dữ liệu
+                        <select value={scanInterval ?? 0} onChange={(e)=>setScanInterval(Number(e.target.value)||null)}>
+                          <option value={0}>Theo lịch bên dưới</option>
+                          <option value={10}>10 giây</option><option value={30}>30 giây</option>
+                          <option value={60}>1 phút</option><option value={300}>5 phút</option>
+                          <option value={600}>10 phút</option><option value={1800}>30 phút</option>
+                          <option value={3600}>1 giờ</option>
+                        </select>
+                      </label>
+                      <label>Nhân viên phụ trách<input value={editEditor} onChange={e=>setEditEditor(e.target.value)} placeholder="Tên nhân viên" /></label>
+                      <label>Ghi chú nội bộ<textarea value={editNote} onChange={e=>setEditNote(e.target.value)} placeholder="Chỉ nhân viên studio nhìn thấy" maxLength={2000}/></label>
                       <label>
                         Lịch quét cron
                         <input
