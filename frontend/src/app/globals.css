@@ -3339,3 +3339,17 @@ td strong {
 @media (max-width: 480px) {
   .album-grid.grid.file-browser-grid { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 7px; }
 }
+
+.modal.modal-image-preview { width:96vw; max-width:1600px; height:94dvh; max-height:94dvh; padding:16px; display:flex; flex-direction:column; }
+.modal-image-preview .modal-heading { flex:none; margin-bottom:12px; padding-bottom:12px; }
+.modal-image-preview .modal-heading h2 { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.modal-image-preview .full-image-preview { display:block; width:100%; flex:1; min-height:0; object-fit:contain; }
+
+.image-preview-viewer { flex:1; min-height:0; display:flex; flex-direction:column; gap:10px; }
+.image-preview-toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:8px; flex:none; }
+.image-preview-toolbar button { padding:6px 12px; border:1px solid var(--line); border-radius:6px; background:var(--surface,#fff); }
+.image-preview-toolbar span,.image-preview-toolbar small { font-size:12px; }
+.image-preview-toolbar small { margin-left:auto; }
+.image-preview-stage { flex:1; min-height:0; overflow:hidden; display:flex; justify-content:center; align-items:center; position:relative; background:#182320; border-radius:8px; touch-action:none; }
+.image-preview-stage img { max-width:100%; max-height:100%; object-fit:contain; flex:none; user-select:none; }
+.preview-status { position:absolute; color:white; padding:20px; }

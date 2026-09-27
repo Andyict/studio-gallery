@@ -1,4 +1,5 @@
 "use client";
+import ImagePreview from "./ImagePreview";
 import { useCallback, useEffect, useState } from "react";
 import {
   Aperture,
@@ -1616,8 +1617,8 @@ export default function Admin() {
         </div>
       )}
       {browserPreview && (
-        <Modal title={browserPreview.name} close={() => setBrowserPreview(null)}>
-          {browserPreview.thumbnail ? <img style={{maxWidth:"100%",maxHeight:"70vh",objectFit:"contain"}} src={`/api/admin/browse/thumb?size=preview&path=${encodeURIComponent(browserPreview.path)}`} alt={browserPreview.name} /> : <p className="muted">Định dạng này chưa có ảnh xem trước trong trình duyệt. Tệp vẫn nằm trong thư mục nguồn trên NAS.</p>}
+        <Modal wide title={browserPreview.name} close={() => setBrowserPreview(null)}>
+          {browserPreview.thumbnail ? <ImagePreview key={browserPreview.path} src={`/api/admin/browse/thumb?size=preview&path=${encodeURIComponent(browserPreview.path)}`} name={browserPreview.name} /> : <p className="muted">Định dạng này chưa có ảnh xem trước trong trình duyệt. Tệp vẫn nằm trong thư mục nguồn trên NAS.</p>}
         </Modal>
       )}
       {createOpen && (
