@@ -1,3 +1,4 @@
+import {photoPath,sharedFolders} from './shares.mjs';
 import {supportedFile,isVideo,serveVideo} from './media.mjs';
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
@@ -139,16 +140,21 @@ export async function createApp(options={}) {
     for(const key of ['proof_admin','proof_client']) {if(req.cookies[key])db.run('UPDATE sessions SET expires_at=? WHERE token_hash=?',new Date().toISOString(),digest(req.cookies[key]));reply.clearCookie(key,{path:'/'});}
     return {ok:true};
   });
+  app.get('/api/admin/shares',async req=>{
+    const session=authenticate(req,true);if(session.user.role!=='admin')fail(403,'Chỉ quản trị viên được xem shared folder');
+    const sources=db.all('SELECT * FROM approved_sources');
+    return (await sharedFolders()).map(s=>{const saved=sources.find(a=>a.relative_path===s.relative_path);return {...s,id:saved?.id,label:s.name,enabled:!!saved?.enabled};});
+  });
   app.get('/api/admin/directories',async req=>{
     authenticate(req,true); const relative=cleanRelative(req.query.path||'');
-    const entries=await readdir(await safePath(config.photoRoot,relative),{withFileTypes:true});
+    let entries;try{entries=await readdir(await photoPath(config.photoRoot,relative),{withFileTypes:true});}catch(e){if(e.code==='EACCES')fail(403,'Studio Gallery chưa có quyền đọc thư mục. Trong DSM: Shared Folder → Edit → Permissions → System internal user → StudioGallery: Read only.');throw e;}
     return {path:relative,folders:entries.filter(e=>e.isDirectory()&&!e.isSymbolicLink()&&!e.name.startsWith('.')&&!['@eaDir','#recycle'].includes(e.name)).map(e=>({name:e.name,path:relative?`${relative}/${e.name}`:e.name}))};
   });
   app.get('/api/admin/sources',async req=>{authenticate(req,true);return db.all('SELECT * FROM approved_sources ORDER BY label,relative_path').map(s=>({...s,enabled:!!s.enabled}));});
   app.post('/api/admin/sources',async(req,reply)=>{
     const session=authenticate(req,true);if(session.user.role!=='admin')fail(403,'Chỉ quản trị viên được quản lý nguồn ảnh');
     const b=parse(z.object({relative_path:z.string().max(1024),label:text}),req.body),relative=cleanRelative(b.relative_path);
-    if(!(await stat(await safePath(config.photoRoot,relative))).isDirectory())fail(400,'Nguồn ảnh không phải thư mục');
+    if(!(await stat(await photoPath(config.photoRoot,relative))).isDirectory())fail(400,'Nguồn ảnh không phải thư mục');
     const existing=db.get('SELECT * FROM approved_sources WHERE relative_path=?',relative);
     if(existing){db.run('UPDATE approved_sources SET label=?,enabled=1 WHERE id=?',b.label,existing.id);return {id:existing.id};}
     const sid=id();db.run('INSERT INTO approved_sources(id,relative_path,label) VALUES(?,?,?)',sid,relative,b.label);return reply.code(201).send({id:sid});
@@ -161,7 +167,7 @@ export async function createApp(options={}) {
   });
   app.post('/api/admin/sources/:id/discover',async(req,reply)=>{
     authenticate(req,true);const source=db.get('SELECT * FROM approved_sources WHERE id=? AND enabled=1',req.params.id);if(!source)fail(404,'Nguồn ảnh chưa được bật');
-    const root=await safePath(config.photoRoot,source.relative_path),entries=await readdir(root,{withFileTypes:true});
+    const root=await photoPath(config.photoRoot,source.relative_path),entries=await readdir(root,{withFileTypes:true});
     const folders=entries.filter(e=>e.isDirectory()&&!e.isSymbolicLink()&&!e.name.startsWith('.')&&!['@eaDir','#recycle','.snapshot'].includes(e.name));
     const candidates=[];
     for(const folder of folders){
@@ -217,7 +223,7 @@ export async function createApp(options={}) {
     authenticate(req,true);
     const p=parse(z.object({name:text,root:z.string().max(1024),cron:z.string().max(80).default(config.defaultCron),timezone:z.string().max(80).default(config.defaultTimezone)}),req.body);
     const root=cleanRelative(p.root);
-    if(!(await stat(await safePath(config.photoRoot,root))).isDirectory())fail(400,'Chọn một thư mục');
+    if(!(await stat(await photoPath(config.photoRoot,root))).isDirectory())fail(400,'Chọn một thư mục');
     const approved=db.all('SELECT relative_path FROM approved_sources WHERE enabled=1');
     if(!approved.some(s=>descendant(root,s.relative_path)))fail(403,'Hãy bật quyền truy cập nguồn ảnh này trong Cài đặt trước');
     if(db.get('SELECT id FROM projects WHERE root=?',root))fail(409,'Thư mục đã có trong project');

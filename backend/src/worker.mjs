@@ -1,3 +1,4 @@
+import {photoPath} from './shares.mjs';
 import sharp from 'sharp';
 import { mkdir, readdir, rename, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
@@ -25,7 +26,7 @@ export function createWorker(db, config, logger) {
   }
   async function render(photo) {
     const project = db.get('SELECT * FROM projects WHERE id=?',photo.project_id);
-    const root = await safePath(config.photoRoot,project.root);
+    const root = await photoPath(config.photoRoot,project.root);
     const source = await safeOpen(root,photo.relative_path);
     const preview = cacheFile(config,photo);
     const temp = `${preview}.tmp`;

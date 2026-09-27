@@ -7,7 +7,7 @@
       "type":"app", "title":"Studio Gallery Console",
       "appWindow":"SYNO.SDS.App.StudioGallery.Instance", "depend":[],
       "allUsers":false, "allowMultiInstance":false, "hidden":false,
-      "version":"0.2.0-20", "icon":"images/console_{0}.png"
+      "version":"0.2.0-21", "icon":"images/console_{0}.png"
     }
   }
 }

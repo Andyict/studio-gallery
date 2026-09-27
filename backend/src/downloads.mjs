@@ -1,3 +1,4 @@
+import {photoPath} from './shares.mjs';
 import {isVideo} from './media.mjs';
 import yazl from 'yazl';
 import { open } from 'node:fs/promises';
@@ -45,7 +46,7 @@ export function registerDownloads(app, {db,config,authenticate,photoAllowed,list
     // Preflight before sending headers; file handles are closed immediately, not held per entry.
     async function source(entry) {
       if(entry.original) {
-        const handle=await safeOpen(await safePath(config.photoRoot,entry.project.root),entry.photo.relative_path);
+        const handle=await safeOpen(await photoPath(config.photoRoot,entry.project.root),entry.photo.relative_path);
         const info=await handle.stat();
         if(info.size!==entry.photo.bytes || info.mtimeMs!==entry.photo.mtime) { await handle.close(); fail(409,'Nguồn ảnh thay đổi; hãy đồng bộ lại'); }
         return handle;

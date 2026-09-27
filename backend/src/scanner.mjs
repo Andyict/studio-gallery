@@ -1,3 +1,4 @@
+import {photoPath} from './shares.mjs';
 import { readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { CronExpressionParser } from 'cron-parser';
@@ -20,7 +21,7 @@ export function createScanner(db, config, logger) {
     db.run("INSERT INTO scan_runs(id,project_id,status) VALUES(?,?,'running')", scanID, project.id);
     let count = 0;
     try {
-      const root = await safePath(config.photoRoot, project.root);
+      const root = await photoPath(config.photoRoot, project.root);
       if (!(await stat(root)).isDirectory()) fail(400, 'Nguồn ảnh không phải thư mục');
       async function walk(relative) {
         if (stopped) throw new Error('Server stopping');
