@@ -15,8 +15,8 @@ flowchart LR
   CLIENT --> FAV[Chọn ảnh yêu thích]
   CLIENT --> COMMENT[Ghi chú trên ảnh]
   CLIENT --> CHAT[Tin nhắn album]
-  COMMENT --> INBOX[Manager: Tin nhắn album / Hộp thư]
-  CHAT --> INBOX
+  COMMENT --> NOTES[Manager: Ghi chú dưới ảnh trong album]
+  CHAT --> INBOX[Manager: Mỗi album một hội thoại]
   INBOX --> STAFF[Nhân viên xử lý và trả lời]
 ```
 
@@ -26,7 +26,7 @@ flowchart LR
 - **Duyệt thư mục** phản ánh cây NAS, dù thư mục đó chưa là album. Tạo album, link và mở cài đặt ngay tại thư mục đang xem.
 - **Album** là đơn vị tạo link, lịch quét, nhân viên phụ trách và ghi chú nội bộ. Quét nội dung đệ quy dưới thư mục album.
 - **Khách** chỉ thấy nội dung thuộc link và quyền được cấp. Ghi chú trên ảnh có thể ghim vị trí hoặc gửi không ghim; tin nhắn album là kênh chung của album.
-- **Hộp thư Manager** gom ghi chú ảnh chưa xử lý và tin nhắn album chưa đọc. Huy hiệu bên trái đếm cả hai. Ghi chú nội bộ/nhân viên không gửi cho khách.
+- **Tin nhắn album** hiển thị một hội thoại cho mỗi album có tin nhắn, gồm cả lịch sử đã đọc. Huy hiệu bên trái chỉ đếm tin nhắn khách chưa đọc. Ghi chú ảnh nằm trong album. Ghi chú nội bộ/nhân viên không gửi cho khách.
 
 ## Trạng thái điều hướng
 
@@ -36,4 +36,4 @@ Manager có bốn màn hình chính: Duyệt thư mục, Hộp thư, Quản lý 
 
 - Khám phá nguồn chạy mỗi 10 phút và có thể mất lâu trên NAS rất nhiều thư mục. Nó chỉ tạo album mới; album cũ theo lịch riêng.
 - Thumbnail/video phụ thuộc codec có sẵn trên NAS. Tệp chưa hỗ trợ vẫn hiện trong cây thư mục nhưng có thể chưa có preview.
-- Hộp thư hiển thị tối đa 200 ghi chú và 200 tin nhắn chưa xử lý mỗi lần tải; cần phân trang nếu quy mô lớn hơn.
+- Hội thoại hiện tải toàn bộ lịch sử của album; cần phân trang nếu lượng tin nhắn lớn.

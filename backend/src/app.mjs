@@ -438,11 +438,19 @@ export async function createApp(options={}) {
     return [...notes,...messages].sort((a,b)=>b.created_at.localeCompare(a.created_at));
   });
   app.get('/api/admin/chats',async req=>{authenticate(req,true);return db.all(`SELECT project_id,p.name AS project_name,count(*) AS message_count,max(c.created_at) AS last_message,
-    sum(CASE WHEN c.sender_role='client' AND c.read_at IS NULL THEN 1 ELSE 0 END) AS unread_count
+    sum(CASE WHEN c.sender_role='client' AND c.read_at IS NULL THEN 1 ELSE 0 END) AS unread_count,
+    (SELECT body FROM chat_messages latest WHERE latest.project_id=c.project_id ORDER BY created_at DESC,id DESC LIMIT 1) AS last_body
     FROM chat_messages c JOIN projects p ON p.id=c.project_id GROUP BY project_id ORDER BY last_message DESC`);});
-  app.get('/api/admin/projects/:id/chat',async req=>{authenticate(req,true);return db.all('SELECT id,sender_role,sender_name,body,created_at FROM chat_messages WHERE project_id=? ORDER BY created_at,id',req.params.id);});
+  app.get('/api/admin/projects/:id/chat',async req=>{authenticate(req,true);return db.all('SELECT id,sender_role,sender_name,body,created_at,read_at FROM chat_messages WHERE project_id=? ORDER BY created_at,id',req.params.id);});
   app.post('/api/admin/projects/:id/chat',async req=>{authenticate(req,true);const b=parse(z.object({body:z.string().trim().min(1).max(2000)}),req.body),mid=id();db.run('INSERT INTO chat_messages(id,project_id,sender_role,sender_name,body) VALUES(?,?,?,?,?)',mid,req.params.id,'admin','Studio',b.body);return {id:mid};});
-  app.patch('/api/admin/projects/:id/chat/read',async req=>{authenticate(req,true);db.run("UPDATE chat_messages SET read_at=COALESCE(read_at,CURRENT_TIMESTAMP) WHERE project_id=? AND sender_role='client'",req.params.id);return {ok:true};});
+  app.patch('/api/admin/projects/:id/chat/read',async req=>{
+    authenticate(req,true);
+    const b=parse(z.object({ids:z.array(z.string()).optional()}),req.body||{});
+    if(b.ids) {
+      for(const mid of b.ids) db.run("UPDATE chat_messages SET read_at=COALESCE(read_at,CURRENT_TIMESTAMP) WHERE project_id=? AND id=? AND sender_role='client'",req.params.id,mid);
+    } else db.run("UPDATE chat_messages SET read_at=COALESCE(read_at,CURRENT_TIMESTAMP) WHERE project_id=? AND sender_role='client'",req.params.id);
+    return {ok:true};
+  });
   app.patch('/api/admin/comments/:id',async req=>{authenticate(req,true);const b=parse(z.object({resolved:z.boolean()}),req.body);db.run('UPDATE comments SET resolved=? WHERE id=?',+b.resolved,req.params.id);return {ok:true};});
   registerDownloads(app,{db,config,authenticate,photoAllowed,listOwned,photosFor,activeLink});
   const timers=[];

@@ -1,5 +1,6 @@
 "use client";
 import ImagePreview from "./ImagePreview";
+import AlbumInbox from "./AlbumInbox";
 import { useCallback, useEffect, useState } from "react";
 import {
   Aperture,
@@ -56,10 +57,6 @@ export default function Admin() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [returnToInbox, setReturnToInbox] = useState(false);
-  const [inbox, setInbox] = useState<any[]>([]);
-  const [chatBody, setChatBody] = useState("");
-  const [chatThread, setChatThread] = useState<any[]>([]);
-  const [chatProject, setChatProject] = useState<string|null>(null);
   const [settingsTab, setSettingsTab] = useState("general");
   const [brand, setBrand] = useState("Studio Gallery"),
     [auth, setAuth] = useState(false),
@@ -223,13 +220,6 @@ export default function Admin() {
     const timer = setInterval(() => void load(), 10000);
     return () => { active = false; controller.abort(); clearInterval(timer); };
   }, [auth, dashboardTab, browserPath, systemOpen, chatOpen, selected]);
-  useEffect(() => {
-    if (!auth || !chatOpen) return;
-    let active=true;
-    const load=()=>api("/admin/inbox").then(data=>{if(active)setInbox(data);}).catch(e=>{if(active)setError(e.message);});
-    void load();const timer=setInterval(()=>{if(!document.hidden)void load();},15000);
-    return()=>{active=false;clearInterval(timer);};
-  },[auth,chatOpen]);
   useEffect(() => {
     if (!auth || !selected) return;
     void detail().catch((e) => setError(e.message));
@@ -477,7 +467,7 @@ export default function Admin() {
         <button className={`nav-item ${chatOpen ? "active" : ""}`} onClick={() => { setChatOpen(true); setSystemOpen(false); setSelected(""); }}>
           <MessageCircle size={18} />
           Tin nhắn album
-          <span className="nav-count">{projects.reduce((n,p)=>n+(p.open_comment_count||0)+(p.unread_message_count||0),0)}</span>
+          <span className="nav-count">{projects.reduce((n,p)=>n+(p.unread_message_count||0),0)}</span>
         </button>
         <button
           className={`nav-item ${!chatOpen && !systemOpen && !selected && dashboardTab === "shared" ? "active" : ""}`}
@@ -620,20 +610,7 @@ export default function Admin() {
             />
           </>
         ) : chatOpen ? (
-          <section className="panel inbox-panel">
-            <div className="panel-title"><div><span className="eyebrow">HỘP THƯ STUDIO</span><h2>Thông báo cần xử lý</h2></div><button onClick={() => setChatOpen(false)}>Đóng</button></div>
-            {inbox.length ? <div className="inbox-list">{inbox.map((item:any)=><article className="inbox-item" key={item.kind+item.id}>
-              <div><strong>{item.project_name}</strong><small>{item.kind==='comment'?`Ghi chú ảnh · ${item.filename}`:'Tin nhắn album'} · {item.sender_name}</small><p>{item.body}</p></div>
-              <div className="inbox-actions"><button onClick={()=>{setChatOpen(false);setReturnToInbox(true);setBrowseOnly(false);setSelected(item.project_id);setTab('overview');}}>Mở album</button>
-              {item.kind==='comment'?<button onClick={()=>void action(async()=>{await api(`/admin/comments/${item.id}`,json('PATCH',{resolved:true}));setInbox(v=>v.filter((x:any)=>x.id!==item.id));await refresh();})}>Đã xử lý</button>
-                :<button onClick={()=>void action(async()=>{setChatProject(item.project_id);setChatThread(await api(`/admin/projects/${item.project_id}/chat`));await api(`/admin/projects/${item.project_id}/chat/read`,json('PATCH',{}));setInbox(v=>v.filter((x:any)=>!(x.kind==='message'&&x.project_id===item.project_id)));})}>Xem & trả lời</button>}</div>
-            </article>)}</div>:<p className="muted">Không có ghi chú hoặc tin nhắn mới.</p>}
-            {chatProject&&<section className="inbox-thread"><h3>Trao đổi trong album</h3>{chatThread.map((m:any)=><p key={m.id}><strong>{m.sender_name||m.sender_role}:</strong> {m.body}</p>)}
-              <form onSubmit={e=>{e.preventDefault();if(!chatBody.trim())return;void action(async()=>{await api(`/admin/projects/${chatProject}/chat`,json('POST',{body:chatBody}));setChatBody("");setChatThread(await api(`/admin/projects/${chatProject}/chat`));});}}>
-                <input value={chatBody} onChange={e=>setChatBody(e.target.value)} placeholder="Trả lời khách hàng…" maxLength={2000}/><button className="primary" disabled={busy||!chatBody.trim()}>Gửi</button>
-              </form></section>}
-            {error&&<p className="alert">{error}</p>}
-          </section>
+          <AlbumInbox onRead={refresh} onOpenAlbum={id => {setChatOpen(false);setReturnToInbox(true);setBrowseOnly(false);setSelected(id);setTab("overview");}} />
         ) : (
           <>
             <section
