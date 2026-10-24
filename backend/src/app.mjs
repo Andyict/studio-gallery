@@ -323,7 +323,8 @@ export async function createApp(options={}) {
       (SELECT count(*) FROM messages WHERE project_id=p.id AND photo_id IS NOT NULL AND author_role='client' AND resolved=0) AS open_comment_count,
       (SELECT count(*) FROM messages WHERE project_id=p.id AND author_role='client' AND seq>COALESCE((SELECT last_seq FROM read_cursors WHERE project_id=p.id AND reader='staff'),0)) AS unread_message_count,
       (SELECT max(created_at) FROM messages WHERE project_id=p.id AND author_role='client') AS last_client_activity,
-      (SELECT group_concat(u.name,', ') FROM project_staff ps JOIN staff_users u ON u.id=ps.user_id WHERE ps.project_id=p.id) AS assigned_names
+      (SELECT group_concat(u.name,', ') FROM project_staff ps JOIN staff_users u ON u.id=ps.user_id WHERE ps.project_id=p.id) AS assigned_names,
+      (SELECT group_concat(ps.user_id) FROM project_staff ps WHERE ps.project_id=p.id) AS assigned_ids
       FROM projects p WHERE ${visible.sql} ORDER BY created_at DESC`,...visible.args)
       .map(p=>({...p,scan:db.get('SELECT * FROM scan_runs WHERE project_id=? ORDER BY rowid DESC LIMIT 1',p.id)||null}));
   });
@@ -355,18 +356,32 @@ export async function createApp(options={}) {
     authenticate(req,true);db.run("UPDATE jobs SET status='pending',attempts=0 WHERE status='failed' AND photo_id IN(SELECT id FROM photos WHERE project_id=?)",req.params.id);return {ok:true};
   });
   app.get('/api/admin/projects/:id/folders',async req=>{authenticate(req,true);return db.all('SELECT * FROM folders WHERE project_id=? AND missing=0 ORDER BY relative_path',req.params.id);});
+  // Photos of an album for the Manager. With `limit` it pages ({photos,total}) and accepts a filename
+  // search and a filter; without it, the whole album comes back as a plain array (older callers).
+  const PHOTO_FILTERS={hearted:' AND EXISTS(SELECT 1 FROM client_selections cs WHERE cs.photo_id=p.id)',
+    notes:" AND EXISTS(SELECT 1 FROM messages c WHERE c.photo_id=p.id AND c.author_role='client' AND c.resolved=0)",
+    edit:' AND p.edit_pick=1',failed:" AND p.status='failed'",pending:" AND p.status NOT IN ('ready','failed')"};
   app.get('/api/admin/projects/:id/photos',async req=>{
-    authenticate(req,true);const folderID=req.query.folder_id||'',args=[req.params.id];let folderClause='';
-    if(folderID){const folder=db.get('SELECT * FROM folders WHERE id=? AND project_id=? AND missing=0',folderID,req.params.id);if(!folder)fail(404,'Không tìm thấy thư mục');folderClause=folder.relative_path?' AND (f.relative_path=? OR substr(f.relative_path,1,?)=?)':' ';if(folder.relative_path)args.push(folder.relative_path,folder.relative_path.length+1,`${folder.relative_path}/`);}
-    return db.all(`SELECT p.id,p.filename,p.extension,p.relative_path,p.width,p.height,p.bytes,p.status,p.missing,p.folder_id,
+    authenticate(req,true);
+    const q=parse(z.object({folder_id:z.string().max(64).optional(),q:z.string().trim().max(200).optional(),filter:z.enum(['all',...Object.keys(PHOTO_FILTERS)]).optional(),
+      limit:z.coerce.number().int().min(1).max(500).optional(),offset:z.coerce.number().int().min(0).default(0)}),req.query||{});
+    const args=[req.params.id];let where='';
+    if(q.folder_id){const folder=db.get('SELECT * FROM folders WHERE id=? AND project_id=? AND missing=0',q.folder_id,req.params.id);if(!folder)fail(404,'Không tìm thấy thư mục');
+      if(folder.relative_path){where+=' AND (f.relative_path=? OR substr(f.relative_path,1,?)=?)';args.push(folder.relative_path,folder.relative_path.length+1,`${folder.relative_path}/`);}}
+    if(q.q){where+=" AND p.filename LIKE ? ESCAPE '!'";args.push(`%${q.q.replace(/[!%_]/g,m=>`!${m}`)}%`);}
+    if(q.filter&&q.filter!=='all')where+=PHOTO_FILTERS[q.filter];
+    const from=`FROM photos p JOIN folders f ON f.id=p.folder_id WHERE p.project_id=? AND p.missing=0 AND p.paired_with IS NULL${where}`;
+    const select=`SELECT p.id,p.filename,p.extension,p.relative_path,p.width,p.height,p.bytes,p.status,p.missing,p.folder_id,p.edit_pick,p.edit_done,
       (SELECT count(*) FROM client_selections cs WHERE cs.photo_id=p.id) AS favorite_count,
       (SELECT count(*) FROM messages c WHERE c.photo_id=p.id AND c.author_role='client' AND c.resolved=0) AS open_comment_count
-      FROM photos p JOIN folders f ON f.id=p.folder_id WHERE p.project_id=? AND p.missing=0 AND p.paired_with IS NULL${folderClause}
-      ORDER BY p.relative_path COLLATE NOCASE LIMIT 10000`,...args);
+      ${from} ORDER BY p.relative_path COLLATE NOCASE`;
+    if(!q.limit)return db.all(`${select} LIMIT 10000`,...args);
+    return {total:db.get(`SELECT count(*) AS n ${from}`,...args).n,offset:q.offset,photos:db.all(`${select} LIMIT ? OFFSET ?`,...args,q.limit,q.offset)};
   });
   app.get('/api/admin/projects/:id/links',async req=>{authenticate(req,true);return db.all('SELECT l.id,l.label,l.scope,l.downloads,l.originals,l.expires_at,l.revoked,l.created_at,COALESCE(c.phone_last4,l.phone_last4) AS phone_last4,l.customer_id,c.name AS customer_name,c.pin_hash IS NOT NULL AS customer_has_pin FROM links l LEFT JOIN customers c ON c.id=l.customer_id WHERE l.project_id=? ORDER BY l.rowid DESC',req.params.id);});
   app.post('/api/admin/projects/:id/links',async(req,reply)=>{
-    const session=authenticate(req,true);const p=db.get('SELECT id FROM projects WHERE id=?',req.params.id);if(!p)fail(404,'Không tìm thấy project');
+    const session=authenticate(req,true);const p=db.get('SELECT id,archived_at FROM projects WHERE id=?',req.params.id);if(!p)fail(404,'Không tìm thấy album');
+    if(p.archived_at)fail(409,'Album đang lưu trữ; khôi phục album để chia sẻ');
     const b=parse(z.object({label:text,password:z.string().max(256).default(''),phone:z.string().max(30).default(''),customer_id:z.string().uuid().optional(),customer_name:z.string().trim().max(120).optional(),folder_ids:z.array(uuid).max(100).default([]),downloads:z.boolean().default(config.defaultDownloads),originals:z.boolean().default(config.defaultOriginals),expires_at:z.string().datetime().nullable().default(null)}),req.body);
     if(b.expires_at&&b.expires_at<=new Date().toISOString())fail(400,'Hạn dùng phải ở tương lai');
     for(const fid of b.folder_ids)if(!db.get('SELECT id FROM folders WHERE id=? AND project_id=? AND missing=0',fid,p.id))fail(400,'Thư mục không thuộc project');
