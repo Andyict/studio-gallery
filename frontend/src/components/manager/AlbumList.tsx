@@ -75,7 +75,7 @@ export default function AlbumList() {
   return (
     <>
       <section className="admin-heading">
-        <div><span className="eyebrow">STUDIO</span><h1>Album</h1><p className="muted">Mọi album bạn được xem: trạng thái, hạn trả, tin nhắn và ghi chú của khách.</p></div>
+        <div><h1>Album</h1></div>
         {isAdmin && <NavLink className="button" to={href.settings("source")}><Server size={16} />Quản lý nguồn ảnh</NavLink>}
       </section>
       <section className="panel album-dashboard-panel">

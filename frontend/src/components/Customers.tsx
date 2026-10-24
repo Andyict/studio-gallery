@@ -33,7 +33,7 @@ export default function Customers({ onOpenAlbum }: { onOpenAlbum: (id: string) =
     if (c.has_pin && !(await confirm({ title: "Cấp PIN mới", body: <p>Mã PIN cũ của {c.name} hết hiệu lực ngay; khách cần mã mới để đăng nhập.</p>, confirm: "Cấp PIN mới" }))) return; const d = await api(`/admin/customers/${c.id}/pin`, json("POST", {})); setIssued({ customer: c.name, pin: d.pin }); await load(search); });
   return <section className="panel customers-panel">
     <div className="panel-title">
-      <div><h2>Khách hàng</h2><p className="muted small">Khách đăng nhập bằng số điện thoại + mã PIN và thấy mọi album được chia sẻ cho mình.</p></div>
+      <span />
       <button className="primary" onClick={() => setCreating({ name: "", phone: "", note: "" })}><Plus size={16} />Thêm khách</button>
     </div>
     <label className="search-box customers-search"><Search size={16} /><input aria-label="Tìm khách" value={search} onChange={e => setSearch(e.target.value)} placeholder="Tên, 4 số cuối hoặc số điện thoại đầy đủ" /></label>

@@ -51,7 +51,7 @@ export default function FolderBrowser() {
   return (
     <>
       <section className="admin-heading">
-        <div><span className="eyebrow">KHO ẢNH</span><h1>Thư mục NAS</h1><p className="muted">Duyệt nguồn ảnh đã bật và tạo album từ một thư mục.</p></div>
+        <div><h1>Thư mục NAS</h1></div>
         {isAdmin && <NavLink className="button" to={href.settings("source")}><Server size={16} />Quản lý nguồn ảnh</NavLink>}
       </section>
       <section className="panel album-dashboard-panel">

@@ -123,26 +123,24 @@ export default function Admin() {
             </div>
           )}
           {route.view === "home" && <>
-            <section className="admin-heading"><div><span className="eyebrow">STUDIO</span><h1>Việc cần làm</h1><p className="muted">Album chờ chỉnh sửa, hạn trả ảnh, tin nhắn và ghi chú của khách.</p></div></section>
+            <section className="admin-heading"><div><h1>Việc cần làm</h1></div></section>
             <Dashboard revision={live.n} onOpenAlbum={(id, tab) => go(href.album(id, (tab as any) || "overview"))} onOpenInbox={(id) => go(href.inbox(id || ""))} onOpenCustomers={() => go(href.customers())} />
           </>}
           {route.view === "albums" && <AlbumList />}
           {route.view === "album" && <AlbumView key={route.id} id={route.id} tab={route.tab} />}
           {route.view === "folders" && !limited && <FolderBrowser />}
           {route.view === "inbox" && <>
-            <section className="admin-heading"><div><span className="eyebrow">STUDIO</span><h1>Tin nhắn</h1><p className="muted">Trò chuyện với khách và ghi chú trên ảnh, theo từng album.</p></div></section>
+            <section className="admin-heading"><div><h1>Tin nhắn</h1></div></section>
             <AlbumInbox key={route.project} revision={live.n} initialProject={route.project} onRead={refresh} onOpenAlbum={(id) => go(href.album(id))} />
           </>}
           {route.view === "customers" && <>
-            <section className="admin-heading"><div><span className="eyebrow">STUDIO</span><h1>Khách hàng</h1><p className="muted">Tài khoản khách đăng nhập bằng số điện thoại và mã PIN.</p></div></section>
+            <section className="admin-heading"><div><h1>Khách hàng</h1></div></section>
             <Customers onOpenAlbum={(id) => go(href.album(id))} />
           </>}
           {route.view === "settings" && <>
             <section className="admin-heading">
               <div>
-                <span className="eyebrow">STUDIO</span>
                 <h1>{isAdmin ? "Cài đặt & nhân viên" : "Tài khoản của tôi"}</h1>
-                <p className="muted">{isAdmin ? "Thiết lập studio, nguồn ảnh, thông báo và quyền của đội ngũ." : "Đổi mật khẩu đăng nhập của bạn."}</p>
               </div>
               <NavLink className="button" to={href.albums()}>Về album</NavLink>
             </section>
