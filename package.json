@@ -1,7 +1,7 @@
 {
   "name": "nas-photo-proofing",
   "private": true,
-  "version": "0.4.1",
+  "version": "0.4.2",
   "type": "module",
   "scripts": {
     "test": "node --test backend/test/*.test.mjs",

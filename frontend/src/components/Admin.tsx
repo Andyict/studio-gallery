@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Aperture, Check, X } from "lucide-react";
 import { api, json } from "@/lib/api";
 import { useLiveEvents } from "@/lib/live";
-import { go, href, NavLink, useAdminRoute } from "@/lib/adminRoute";
+import { go, href, useAdminRoute } from "@/lib/adminRoute";
 import AlbumInbox from "./AlbumInbox";
 import NotificationBell from "./NotificationBell";
 import Customers from "./Customers";
@@ -122,30 +122,13 @@ export default function Admin() {
               <button className="icon-button" aria-label="Đóng thông báo" onClick={() => setError("")}><X size={16} /></button>
             </div>
           )}
-          {route.view === "home" && <>
-            <section className="admin-heading"><div><h1>Việc cần làm</h1></div></section>
-            <Dashboard revision={live.n} onOpenAlbum={(id, tab) => go(href.album(id, (tab as any) || "overview"))} onOpenInbox={(id) => go(href.inbox(id || ""))} onOpenCustomers={() => go(href.customers())} />
-          </>}
+          {route.view === "home" && <Dashboard revision={live.n} onOpenAlbum={(id, tab) => go(href.album(id, (tab as any) || "overview"))} onOpenInbox={(id) => go(href.inbox(id || ""))} onOpenCustomers={() => go(href.customers())} />}
           {route.view === "albums" && <AlbumList />}
           {route.view === "album" && <AlbumView key={route.id} id={route.id} tab={route.tab} />}
           {route.view === "folders" && !limited && <FolderBrowser />}
-          {route.view === "inbox" && <>
-            <section className="admin-heading"><div><h1>Tin nhắn</h1></div></section>
-            <AlbumInbox key={route.project} revision={live.n} initialProject={route.project} onRead={refresh} onOpenAlbum={(id) => go(href.album(id))} />
-          </>}
-          {route.view === "customers" && <>
-            <section className="admin-heading"><div><h1>Khách hàng</h1></div></section>
-            <Customers onOpenAlbum={(id) => go(href.album(id))} />
-          </>}
-          {route.view === "settings" && <>
-            <section className="admin-heading">
-              <div>
-                <h1>{isAdmin ? "Cài đặt & nhân viên" : "Tài khoản của tôi"}</h1>
-              </div>
-              <NavLink className="button" to={href.albums()}>Về album</NavLink>
-            </section>
-            <SystemSettings me={me} initialTab={settingsTab} onTabChange={(tab) => go(href.settings(tab), { replace: true })} onSaved={() => void loadBrand()} />
-          </>}
+          {route.view === "inbox" && <AlbumInbox key={route.project} revision={live.n} initialProject={route.project} onRead={refresh} onOpenAlbum={(id) => go(href.album(id))} />}
+          {route.view === "customers" && <Customers onOpenAlbum={(id) => go(href.album(id))} />}
+          {route.view === "settings" && <SystemSettings me={me} initialTab={settingsTab} onTabChange={(tab) => go(href.settings(tab), { replace: true })} onSaved={() => void loadBrand()} />}
           <footer className="admin-footer"><Aperture size={15} />{brand}<span>Lưu giữ riêng tư. Chia sẻ có chọn lọc.</span></footer>
         </main>
         {notice && <div className="toast" role="status"><Check size={16} />{notice}</div>}

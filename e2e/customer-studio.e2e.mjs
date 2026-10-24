@@ -113,7 +113,6 @@ test('customer picks, notes, chats and submits; studio sees it and replies live'
   await studio.goto(`${origin}/manager`);
   await studio.getByLabel('Mật khẩu', { exact: true }).fill('e2e-admin-password');
   await studio.getByRole('button', { name: /Vào studio/ }).click();
-  await studio.getByRole('heading', { name: 'Việc cần làm' }).waitFor();
   await studio.locator('.dashboard-card', { hasText: 'Khách đã gửi' }).getByText('Lan & Minh').waitFor();
   await studio.getByRole('link', { name: /Tin nhắn/ }).click();
   await studio.getByRole('button', { name: /Lan & Minh/ }).click();

@@ -1,8 +1,8 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { Archive, ArchiveRestore, CheckSquare, FolderOpen, Search, Server, X } from "lucide-react";
+import { Archive, ArchiveRestore, CheckSquare, FolderOpen, Search, X } from "lucide-react";
 import { api, json } from "@/lib/api";
-import { href, NavLink, useAdminRoute } from "@/lib/adminRoute";
+import { useAdminRoute } from "@/lib/adminRoute";
 import { AlbumCard, displayProjectPath } from "../AdminParts";
 import { STATUS_OPTIONS, statusLabel } from "../WorkflowCard";
 import { useManager, useStoredView, ViewSwitch, type Project } from "./context";
@@ -74,10 +74,6 @@ export default function AlbumList() {
 
   return (
     <>
-      <section className="admin-heading">
-        <div><h1>Album</h1></div>
-        {isAdmin && <NavLink className="button" to={href.settings("source")}><Server size={16} />Quản lý nguồn ảnh</NavLink>}
-      </section>
       <section className="panel album-dashboard-panel">
         <div className="panel-title album-browser-toolbar">
           <div>

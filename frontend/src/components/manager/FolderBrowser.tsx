@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { ArrowUp, ChevronRight, Folder, FolderOpen, House, Image as ImageIcon, Link as LinkIcon, Plus, Search, Server } from "lucide-react";
+import { ArrowUp, ChevronRight, Folder, FolderOpen, House, Image as ImageIcon, Link as LinkIcon, Plus, Search } from "lucide-react";
 import { api, json } from "@/lib/api";
 import { go, href, NavLink, useAdminRoute } from "@/lib/adminRoute";
 import ImagePreview from "../ImagePreview";
@@ -50,10 +50,6 @@ export default function FolderBrowser() {
   }
   return (
     <>
-      <section className="admin-heading">
-        <div><h1>Thư mục NAS</h1></div>
-        {isAdmin && <NavLink className="button" to={href.settings("source")}><Server size={16} />Quản lý nguồn ảnh</NavLink>}
-      </section>
       <section className="panel album-dashboard-panel">
         <div className="folder-path">
           <button className="icon-button" title="Lên thư mục cha" aria-label="Lên thư mục cha" disabled={!path} onClick={() => go(href.folders(path.split("/").slice(0, -1).join("/")))}><ArrowUp size={17} /></button>
