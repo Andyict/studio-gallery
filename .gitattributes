@@ -1,0 +1,7 @@
+* text=auto
+# Executed on the NAS by /bin/sh or node; must keep LF on Windows checkouts.
+synology/scripts/* text eol=lf
+synology/ui/api.cgi text eol=lf
+*.sh text eol=lf
+*.spk binary
+*.png binary

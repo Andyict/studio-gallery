@@ -7,3 +7,7 @@ cache/
 test-results/
 *.log
 NAS-ACCESS.txt
+# Packages are published as GitHub Release assets, never committed.
+*.spk
+dist/
+.spk-stage/

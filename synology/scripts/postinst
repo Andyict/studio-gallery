@@ -1,21 +1,19 @@
 #!/bin/sh
 set -eu
-PKG_VAR="/var/packages/StudioGallery/var"
-PKG_TARGET="/var/packages/StudioGallery/target"
-mkdir -p "$PKG_VAR/data" "$PKG_VAR/cache"
-if [ ! -f "$PKG_VAR/.env" ]; then
-  cat > "$PKG_VAR/.env" <<'EOF'
+. "$(dirname "$0")/common"
+mkdir -p "$PKG_VAR/data" "$PKG_VAR/cache" "$PKG_VAR/logs"
+if [ ! -f "$ENV_FILE" ]; then
+  cat > "$ENV_FILE" <<'EOF'
 PHOTO_SOURCE=/volume1/Studio
 DATA_PATH=/var/packages/StudioGallery/var/data
 CACHE_PATH=/var/packages/StudioGallery/var/cache
-PUBLIC_ORIGIN=http://192.168.50.246:3215
+# Exact address customers open, e.g. https://gallery.example.com or http://192.168.1.10:3215.
+# Leave empty to use the NAS LAN address on port 3215, detected at each start.
+PUBLIC_ORIGIN=
 APP_NAME="Studio Gallery"
 ADMIN_PASSWORD=
 EOF
 fi
-sed -i 's/^APP_NAME=.*/APP_NAME="Studio Gallery"/' "$PKG_VAR/.env"
-chmod 600 "$PKG_VAR/.env"
-set -a; . "$PKG_VAR/.env"; set +a
-/var/packages/Node.js_v22/target/usr/local/bin/node -e 'require("fs").writeFileSync(process.argv[1], JSON.stringify({origin:new URL(process.env.PUBLIC_ORIGIN).origin}))' "$PKG_TARGET/ui/transport.json"
-chmod 644 "$PKG_TARGET/ui/transport.json"
+grep -q '^APP_NAME=' "$ENV_FILE" || echo 'APP_NAME="Studio Gallery"' >> "$ENV_FILE"
+chmod 600 "$ENV_FILE"
 chmod 755 "$PKG_TARGET/ui/api.cgi"

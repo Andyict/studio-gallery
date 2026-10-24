@@ -1,0 +1,49 @@
+# Push a tag like v0.3.1 -> tests, builds the x86_64 .spk and publishes a GitHub Release with
+# the package and release.json. NAS installs see it in Package Center through the package source
+# http://127.0.0.1:3215/api/pkg-source. The tag must match "version" in package.json.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  spk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Check version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: test "${GITHUB_REF_NAME#v}" = "$(node -p "require('./package.json').version")"
+      - name: Install
+        run: |
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+          npm ci
+          npm --prefix backend ci
+      - name: Test
+        run: npm test
+      - name: Build web
+        run: npm run build
+      - name: End-to-end (Chromium)
+        run: |
+          npx playwright install --with-deps chromium
+          npm run e2e
+      - name: Build package
+        run: node scripts/build-spk.mjs --skip-web --build "$GITHUB_RUN_NUMBER"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: spk
+          path: dist/*.spk
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/*.spk dist/release.json --title "Studio Gallery $GITHUB_REF_NAME" --generate-notes

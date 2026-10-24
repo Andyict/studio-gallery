@@ -13,16 +13,20 @@ function finish(code, data, cookies = []) {
   process.stdout.write(headers + '\r\n' + JSON.stringify(data), () => process.exit(0));
 }
 function fail(code, message) { finish(code, {message}); }
+function originHost(value) { try { return new URL(value).host; } catch { return null; } }
 const route = new URLSearchParams(env.QUERY_STRING || '').get('route') || '';
 const method = env.REQUEST_METHOD || 'GET';
 const allowed = /^(admin\/(me|login|sources|directories|shares)|admin\/sources\/[a-zA-Z0-9-]+(?:\/(?:discover|options))?)(?:\?[^\r\n]*)?$/.test(route);
 if (!allowed || !['GET','POST','PATCH'].includes(method)) { fail(404, 'Không tìm thấy API'); }
-else if (method !== 'GET' && (!env.HTTP_ORIGIN || new URL(env.HTTP_ORIGIN).host !== env.HTTP_HOST)) { fail(403, 'Origin không hợp lệ'); }
+else if (method !== 'GET' && originHost(env.HTTP_ORIGIN) !== env.HTTP_HOST) { fail(403, 'Origin không hợp lệ'); }
 else {
   const cookies = (env.HTTP_COOKIE || '').split(';').filter(c => c.trim().startsWith('proof_admin=')).join(';');
-  const config = JSON.parse(fs.readFileSync(__dirname + '/transport.json', 'utf8'));
+  let config;
+  // Written by start-stop-status on start; absent until the package has run once.
+  try { config = JSON.parse(fs.readFileSync(__dirname + '/transport.json', 'utf8')); } catch { config = null; }
+  if (!config) { fail(503, 'Studio Gallery chưa khởi động. Hãy chạy gói trong Package Center.'); return; }
   const request = http.request({host:'127.0.0.1',port:3211,path:'/api/'+route,method,
-    headers:{'content-type':'application/json',cookie:cookies,origin:config.origin}}, response => {
+    headers:{'content-type':'application/json',cookie:cookies,origin:config.origin,'x-forwarded-for':env.REMOTE_ADDR||'127.0.0.1'}}, response => {
     let body='';response.on('data', chunk => body+=chunk);
     response.on('end', () => {let data;try{data=JSON.parse(body);}catch{data={message:'Phản hồi backend không hợp lệ'};}finish(response.statusCode,{status:response.statusCode,data},response.headers['set-cookie'] || []);});
   });

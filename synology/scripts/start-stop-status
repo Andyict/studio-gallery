@@ -1,27 +1,78 @@
 #!/bin/sh
 set -eu
-PKG="StudioGallery"
-PKG_VAR="/var/packages/$PKG/var"
-PKG_TARGET="/var/packages/$PKG/target"
-ENV_FILE="$PKG_VAR/.env"
-NODE="/var/packages/Node.js_v22/target/usr/local/bin/node"
+. "$(dirname "$0")/common"
 mkdir -p "$PKG_VAR/logs"
+
+# A pid file only counts while it still points at our own node process, so a
+# pid reused by another program after a crash does not look like "running".
+running() {
+  pidfile="$PKG_VAR/$1.pid"
+  [ -f "$pidfile" ] || return 1
+  pid=$(cat "$pidfile" 2>/dev/null || true)
+  [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null || return 1
+  tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null | grep -q "$2"
+}
+
+rotate_log() {
+  log="$PKG_VAR/logs/$1.log"
+  if [ -f "$log" ] && [ "$(wc -c < "$log")" -gt 5242880 ]; then mv -f "$log" "$log.1"; fi
+}
+
+launch() {
+  name=$1; marker=$2; dir=$3; script=$4
+  running "$name" "$marker" && return 0
+  rotate_log "$name"
+  cd "$dir"
+  nohup "$NODE" "$script" >> "$PKG_VAR/logs/$name.log" 2>&1 &
+  echo $! > "$PKG_VAR/$name.pid"
+}
+
+halt() {
+  name=$1; marker=$2; pidfile="$PKG_VAR/$name.pid"
+  if running "$name" "$marker"; then
+    pid=$(cat "$pidfile")
+    kill "$pid" 2>/dev/null || true
+    i=0
+    while kill -0 "$pid" 2>/dev/null && [ $i -lt 10 ]; do sleep 1; i=$((i+1)); done
+    kill -9 "$pid" 2>/dev/null || true
+  fi
+  rm -f "$pidfile"
+}
 
 case "${1:-}" in
   start)
-    [ -x "$NODE" ] || exit 1
-    if [ -f "$PKG_VAR/backend.pid" ] && kill -0 "$(cat "$PKG_VAR/backend.pid")" 2>/dev/null; then exit 0; fi
-    set -a; . "$ENV_FILE"; set +a
-    export SYNOLOGY_NATIVE=1 PORT=3211 PHOTO_ROOT="${PHOTO_SOURCE:-/volume1/Studio}" DATA_DIR="$PKG_VAR/data" CACHE_DIR="$PKG_VAR/cache" PUBLIC_ORIGIN="${PUBLIC_ORIGIN:-http://$(hostname -i | awk '{print $1}'):3210}"
-    cd "$PKG_TARGET/backend"; nohup "$NODE" src/server.mjs > "$PKG_VAR/logs/backend.log" 2>&1 & echo $! > "$PKG_VAR/backend.pid"
-    export HOSTNAME=0.0.0.0 PORT=3215 API_INTERNAL_URL=http://127.0.0.1:3211
-    cd "$PKG_TARGET/frontend/frontend"; nohup "$NODE" server.js > "$PKG_VAR/logs/frontend.log" 2>&1 & echo $! > "$PKG_VAR/frontend.pid"
+    [ -x "$NODE" ] || { echo "Node.js v22 package is not installed" >&2; exit 1; }
+    load_env
+    # Origin the DSM Console CGI presents to the backend; must match PUBLIC_ORIGIN.
+    "$NODE" -e 'require("fs").writeFileSync(process.argv[1], JSON.stringify({origin:new URL(process.env.PUBLIC_ORIGIN).origin}))' "$PKG_TARGET/ui/transport.json"
+    chmod 644 "$PKG_TARGET/ui/transport.json"
+    (
+      export SYNOLOGY_NATIVE=1 HOST=127.0.0.1 PORT=$API_PORT TRUST_PROXY=loopback \
+        PHOTO_ROOT="${PHOTO_SOURCE:-/volume1/Studio}" DATA_DIR="$PKG_VAR/data" CACHE_DIR="$PKG_VAR/cache" \
+        FFMPEG="$PKG_TARGET/bin/ffmpeg" EXIFTOOL="$PKG_TARGET/bin/exiftool" \
+        APP_VERSION="${SYNOPKG_PKGVER:-$(sed -n 's/^version="\(.*\)"/\1/p' "/var/packages/$PKG/INFO" 2>/dev/null)}" \
+        UPDATE_REPO="${UPDATE_REPO:-Andyict/studio-gallery}"
+      launch backend "src/server.mjs" "$PKG_TARGET/backend" src/server.mjs
+    )
+    (
+      export HOSTNAME=127.0.0.1 PORT=$WEB_PORT API_INTERNAL_URL=http://127.0.0.1:$API_PORT
+      launch frontend "server.js" "$PKG_TARGET/frontend/frontend" server.js
+    )
+    (
+      export HOST=0.0.0.0 PORT=$GATEWAY_PORT API_PORT WEB_PORT
+      launch gateway "gateway.mjs" "$PKG_TARGET" gateway.mjs
+    )
     ;;
   stop)
-    for f in backend frontend; do [ -f "$PKG_VAR/$f.pid" ] && kill "$(cat "$PKG_VAR/$f.pid")" 2>/dev/null || true; done
+    halt gateway "gateway.mjs"
+    halt frontend "server.js"
+    halt backend "src/server.mjs"
     ;;
   status)
-    kill -0 "$(cat "$PKG_VAR/frontend.pid")" 2>/dev/null
+    running gateway "gateway.mjs" && running frontend "server.js" && running backend "src/server.mjs" || exit 3
+    ;;
+  log)
+    echo "$PKG_VAR/logs/backend.log"
     ;;
   *) exit 2 ;;
 esac

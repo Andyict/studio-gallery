@@ -12,6 +12,8 @@ services:
       # Optional: omit this to create the first administrator in the browser.
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:?Set PUBLIC_ORIGIN in .env}
+      # Only the proxy container can reach the API; trust its X-Forwarded-For.
+      TRUST_PROXY: uniquelocal
       PHOTO_ROOT: /photos
       PHOTO_SOURCE_LABEL: ${PHOTO_SOURCE}
       DATA_DIR: /data
@@ -82,7 +84,9 @@ services:
     entrypoint: [nginx, -g, "daemon off;"]
     depends_on: [web, api]
     ports:
-      - "${HTTP_PORT:-8088}:8080"
+      # Set HTTP_BIND=127.0.0.1 when DSM Reverse Proxy is the only way in: nginx trusts
+      # X-Forwarded-For from the Docker bridge, so the port must not also be reachable directly.
+      - "${HTTP_BIND:-0.0.0.0}:${HTTP_PORT:-8088}:8080"
     volumes:
       - ./deploy/nginx.conf:/etc/nginx/nginx.conf:ro
     read_only: true

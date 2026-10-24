@@ -1,0 +1,27 @@
+#!/bin/sh
+# Shared by the package scripts. Sourced, never executed directly.
+PKG="StudioGallery"
+PKG_VAR="/var/packages/$PKG/var"
+PKG_TARGET="/var/packages/$PKG/target"
+ENV_FILE="$PKG_VAR/.env"
+NODE="/var/packages/Node.js_v22/target/usr/local/bin/node"
+GATEWAY_PORT=3215
+WEB_PORT=3210
+API_PORT=3211
+
+# Address the NAS is reached at on the LAN, used when PUBLIC_ORIGIN is empty.
+detect_origin() {
+  ip=""
+  if command -v ip >/dev/null 2>&1; then
+    ip=$(ip -4 route get 1.1.1.1 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p' | head -n 1)
+  fi
+  [ -n "$ip" ] || ip=$(hostname -i 2>/dev/null | tr ' ' '\n' | grep -v '^127\.' | head -n 1)
+  [ -n "$ip" ] || ip=127.0.0.1
+  echo "http://$ip:$GATEWAY_PORT"
+}
+
+load_env() {
+  if [ -f "$ENV_FILE" ]; then set -a; . "$ENV_FILE"; set +a; fi
+  [ -n "${PUBLIC_ORIGIN:-}" ] || PUBLIC_ORIGIN=$(detect_origin)
+  export PUBLIC_ORIGIN
+}
