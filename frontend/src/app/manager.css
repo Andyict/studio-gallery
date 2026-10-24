@@ -1,0 +1,124 @@
+/* Studio Manager (components/Admin.tsx and components/manager). Loaded after studio-theme.css. */
+
+/* Navigation: links instead of buttons, so they need the button look spelled out. */
+.sidebar-nav { display: flex; flex-direction: column; }
+.sidebar .nav-item { display: flex; align-items: center; width: 100%; text-decoration: none; }
+.sidebar .nav-item .nav-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar .nav-item .nav-short { display: none; }
+.sidebar .nav-item .nav-count { margin-left: auto; }
+.sidebar-collapsed .sidebar .nav-item .nav-label, .sidebar-collapsed .sidebar .nav-item .nav-count { display: none; }
+
+/* Top bar: notification bell + account menu, right-aligned. */
+.admin-top .row { gap: 10px; }
+.account-menu { position: relative; }
+.account-button { display: inline-flex; align-items: center; gap: 8px; border: 0; background: transparent; padding: 0; min-height: 0; }
+.account-button:hover { background: transparent; }
+.account-popover { position: absolute; right: 0; top: calc(100% + 10px); z-index: 40; min-width: 220px; background: #fff; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 40px #12302414; padding: 6px; display: grid; }
+.account-popover > a, .account-popover > button { display: flex; align-items: center; gap: 10px; justify-content: flex-start; width: 100%; border: 0; background: transparent; padding: 10px 12px; border-radius: 8px; font-size: 13px; font-weight: 500; min-height: 0; }
+.account-popover > a:hover, .account-popover > button:hover { background: #f0f6f2; }
+.account-who { display: grid; padding: 10px 12px 12px; border-bottom: 1px solid var(--line); margin-bottom: 6px; }
+
+.page-alert { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+
+/* Page headings. */
+.back-link { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+.back-link:hover { color: var(--ink); }
+.album-heading-meta { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: 12px; }
+.album-missing { margin-top: 40px; }
+.archived-banner { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; background: #f6efe1; border: 1px solid #e6d6b4; color: #6c5520; border-radius: 12px; padding: 12px 16px; margin-bottom: 18px; font-size: 13px; }
+
+/* Album tabs are links. */
+.album-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; }
+.album-heading > button { display: inline-flex; }
+.album-heading p.album-heading-meta { display: flex; margin-top: 6px; }
+.tabs a { white-space: nowrap; padding: 18px 0; color: var(--muted); border-bottom: 2px solid transparent; font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
+.tabs a.active { color: var(--green); border-bottom-color: var(--green); font-weight: 600; }
+.tabs a:hover { color: var(--ink); }
+.tabs.admin-tabs a { padding: 10px 16px; border: 0; border-radius: 8px; }
+.tabs.admin-tabs a.active { background: #fff; color: var(--green); box-shadow: 0 2px 5px #243a2910; border-bottom: 0; }
+.tab-dot { width: 7px; height: 7px; border-radius: 50%; background: #c27b2c; }
+.tab-count { font-size: 10px; font-weight: 700; background: #f6e3cf; color: #8a4b12; border-radius: 10px; padding: 1px 6px; }
+
+/* Filters and bulk selection. */
+.filter-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 4px 0 16px; }
+.filter-chips .chip { display: inline-flex; gap: 6px; min-height: 32px; white-space: nowrap; flex-shrink: 0; }
+.chip-count { font-size: 10px; opacity: .7; }
+.filter-chips .album-results { margin-left: auto; }
+.bulk-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; min-height: 36px; }
+.bulk-bar.on { background: #eef5f0; border: 1px solid #cfe0d5; border-radius: 12px; padding: 8px 12px; }
+.bulk-bar .grow { flex: 1; }
+.bulk-bar select { width: auto; min-height: 36px; }
+.album-dashboard-tools select { width: auto; min-height: 40px; }
+
+/* Album cards are links (or toggles in selection mode). */
+a.album-card { display: block; color: var(--ink); text-decoration: none; }
+.album-card.is-selected { border-color: var(--green); box-shadow: 0 0 0 2px #2f6a5333; background: #f2f8f4; }
+.album-card-meta { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 10px; font-size: 11px; color: var(--muted); }
+.album-card-meta span { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
+.album-card-status .needs-work { display: inline-flex; align-items: center; gap: 3px; }
+a.folder-row { color: var(--ink); text-decoration: none; }
+
+/* NAS folder browser. */
+.folder-path { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
+.crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: 13px; min-width: 0; }
+.crumbs a { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); }
+.crumbs a:hover { color: var(--ink); }
+.crumbs > span { display: inline-flex; align-items: center; gap: 4px; }
+.album-browser-open { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+
+/* Album photos. */
+.photo-toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 12px; }
+.photo-toolbar .album-search { flex: 1; min-width: 200px; }
+.photo-toolbar select { width: auto; max-width: 260px; min-height: 40px; }
+button.favorite-file { display: grid; align-content: start; gap: 6px; color: var(--ink); font-weight: 400; min-height: 0; justify-content: stretch; }
+.favorite-file > div { min-width: 0; }
+.favorite-file strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.favorite-file small { display: block; color: var(--muted); font-size: 11px; }
+.photo-placeholder { display: flex; align-items: center; justify-content: center; gap: 6px; background: #eef1eb; color: var(--muted); font-size: 11px; }
+.photo-placeholder.failed { background: #f8ece6; color: #9a4b2b; }
+.load-more { display: flex; justify-content: center; padding: 18px 0 6px; }
+
+/* Studio lightbox: same frame as the customer's, plus resolve controls. */
+.mgr-lightbox .note { display: flex; gap: 10px; margin-bottom: 10px; }
+.mgr-lightbox .note.resolved { opacity: .7; }
+.mgr-lightbox .note .text-button { padding: 4px 0; min-height: 0; font-size: 12px; margin-top: 4px; }
+.mgr-lightbox .notes-panel form { margin-top: 18px; display: grid; gap: 10px; }
+.lightbox-facts { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.lightbox-facts .tag { display: inline-flex; align-items: center; gap: 4px; }
+
+/* Tables and dialogs. */
+.check-col { width: 34px; }
+.muted-row td { color: var(--muted); }
+.confirm-body p { margin-bottom: 10px; }
+.confirm-actions { justify-content: flex-end; gap: 10px; margin-top: 18px; }
+button.danger { background: #a7442b; border-color: #a7442b; color: #fff; }
+button.danger:hover { background: #8e3922; }
+.source-row .check-inline { margin-top: 6px; font-size: 12px; }
+
+/* Phones: the sidebar becomes a bottom tab bar; the page keeps the whole screen. */
+@media (max-width: 640px) {
+  .admin-shell .sidebar { position: fixed; inset: auto 0 0 0; top: auto; width: 100%; height: auto; z-index: 50; flex-direction: row; padding: 6px 4px calc(6px + env(safe-area-inset-bottom)); border-radius: 0; border-top: 1px solid #ffffff1a; gap: 0; }
+  .admin-shell .sidebar > .brand, .admin-shell .sidebar-bottom { display: none; }
+  .admin-shell .sidebar-nav { flex-direction: row; width: 100%; justify-content: space-around; }
+  .admin-shell .sidebar .nav-item { position: relative; flex: 1; flex-direction: column; gap: 3px; min-height: 52px; padding: 6px 2px; margin: 0; font-size: 10px; width: auto; justify-content: center; }
+  .admin-shell .sidebar .nav-item .nav-label { display: none; }
+  .admin-shell .sidebar .nav-item .nav-short { display: block; white-space: nowrap; }
+  .admin-shell .sidebar .nav-item .nav-count { position: absolute; top: 3px; left: calc(50% + 6px); margin: 0; font-size: 9px; min-width: 16px; padding: 0 4px; }
+  .admin-shell .admin-main { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
+  .admin-top { height: 56px; margin-bottom: 4px; }
+  .account-name { display: none; }
+  .album-heading { flex-direction: column; align-items: stretch; gap: 12px; }
+  .admin-heading h1 { font-size: 28px; }
+  .bulk-bar.on { position: sticky; top: 8px; z-index: 5; }
+  .filter-chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-inline: -4px; padding-inline: 4px; }
+  .filter-chips .album-results { display: none; }
+  .photo-toolbar select { max-width: 100%; flex: 1; }
+  .mgr-lightbox .lightbox-main { flex-direction: column; overflow: auto; }
+  .mgr-lightbox .lightbox-stage { min-height: 55svh; padding: 12px; }
+  .mgr-lightbox .notes-panel { width: 100%; }
+  .toast { bottom: calc(84px + env(safe-area-inset-bottom)); }
+}
+
+/* Georgia on Windows lacks some Vietnamese letters (ồ, ổ…) and draws them as loose accents;
+   dialog titles use the same face as page titles instead. */
+.modal-heading h2 { font-family: "Segoe UI", system-ui, -apple-system, sans-serif; font-weight: 600; letter-spacing: -.3px; }

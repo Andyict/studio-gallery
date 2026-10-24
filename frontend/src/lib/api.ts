@@ -7,7 +7,12 @@ export async function api<T=any>(url:string,options:RequestInit={}):Promise<T>{
   try{
     const res=await fetch(`/api${url}`,{...options,signal:controller.signal,headers:{'Content-Type':'application/json',...options.headers},cache:'no-store'});
     const body=await res.json().catch(()=>({error:'Máy chủ trả về dữ liệu không hợp lệ'}));
-    if(!res.ok)throw Object.assign(new Error(body.error||'Không thể kết nối'),{status:res.status});return body;
+    if(!res.ok){
+      // An expired staff session: tell the Manager once so it can show the sign-in screen.
+      if(res.status===401&&url.startsWith('/admin/')&&url!=='/admin/login'&&typeof window!=='undefined')window.dispatchEvent(new Event('studio:unauthorized'));
+      throw Object.assign(new Error(body.error||'Không thể kết nối'),{status:res.status});
+    }
+    return body;
   }catch(e){
     if(controller.signal.aborted)throw new Error('Yêu cầu quá lâu hoặc đã bị hủy. Vui lòng thử lại.');
     throw e;

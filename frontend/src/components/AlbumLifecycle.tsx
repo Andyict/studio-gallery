@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { Archive, ArchiveRestore, ArrowDownToLine, Trash2 } from "lucide-react";
 import { api, json } from "@/lib/api";
+import { useManager } from "./manager/context";
 
 // Recent customer downloads for an album (shown on its overview).
 export function DownloadLog({ projectId, revision }: { projectId: string; revision: number }) {
@@ -23,6 +24,7 @@ export function AlbumLifecycle({ project, isAdmin, canManage, onChanged, onDelet
   const [confirm, setConfirm] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const { confirm: ask } = useManager();
   if (!canManage) return null;
   async function run(fn: () => Promise<void>) { setBusy(true); setError(""); try { await fn(); } catch (e) { setError((e as Error).message); } finally { setBusy(false); } }
   const archived = !!project.archived_at;
@@ -32,6 +34,8 @@ export function AlbumLifecycle({ project, isAdmin, canManage, onChanged, onDelet
       ? <p className="small">Album đã lưu trữ từ {new Date(project.archived_at!).toLocaleDateString("vi-VN")}: khách không mở được, album không được quét. Khôi phục để mở lại như cũ.</p>
       : <p className="small">Lưu trữ khi đã giao xong: khách không còn mở được album (cả link và tài khoản), album ngừng quét; mọi dữ liệu được giữ.</p>}
     <button disabled={busy} onClick={() => void run(async () => {
+      if (!(await ask({ title: archived ? "Khôi phục album" : "Lưu trữ album", confirm: archived ? "Khôi phục" : "Lưu trữ",
+        body: <p>{archived ? "Khách mở lại được album và album được quét lại theo lịch." : "Khách không còn mở được album (cả link và tài khoản), album ngừng quét. Dữ liệu vẫn được giữ."}</p> }))) return;
       await api(`/admin/projects/${project.id}/archive`, json("POST", { archived: !archived }));
       await onChanged(archived ? "Đã khôi phục album" : "Đã lưu trữ album");
     })}>{archived ? <><ArchiveRestore size={16} />Khôi phục album</> : <><Archive size={16} />Lưu trữ album</>}</button>

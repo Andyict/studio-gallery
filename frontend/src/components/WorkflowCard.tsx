@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { Check, ClipboardList } from "lucide-react";
 import { api, json } from "@/lib/api";
+import { useManager } from "./manager/context";
 
 export const STATUS_OPTIONS = [
   ["selecting", "Khách đang chọn"],
@@ -19,7 +20,8 @@ const toLocal = (iso: string | null) => {
 
 // Album workflow controls on the Overview tab: status, edit-pick limit, due date and the message
 // shown to the customer. Changing the status back to "selecting" unlocks the customer's choices.
-export default function WorkflowCard({ project, finalFolder, onSaved }: { project: any; finalFolder: string; onSaved: (message: string) => Promise<void> }) {
+export default function WorkflowCard({ project, finalFolder, disabled = false, onSaved }: { project: any; finalFolder: string; disabled?: boolean; onSaved: (message: string) => Promise<void> }) {
+  const { confirm } = useManager();
   const [status, setStatus] = useState(project.status);
   const [maxEdit, setMaxEdit] = useState(String(project.max_edit || 0));
   const [due, setDue] = useState(toLocal(project.due_at));
@@ -30,6 +32,14 @@ export default function WorkflowCard({ project, finalFolder, onSaved }: { projec
     setStatus(project.status); setMaxEdit(String(project.max_edit || 0)); setDue(toLocal(project.due_at)); setMessage(project.client_message || "");
   }, [project.id, project.status, project.max_edit, project.due_at, project.client_message]);
   async function save() {
+    // Two status changes are visible to the customer at once, so they are confirmed first.
+    if (status !== project.status && (status === "selecting" || status === "delivered") && !(await confirm({
+      title: `Chuyển sang “${statusLabel(status)}”`,
+      body: status === "selecting"
+        ? <p>Khách được chọn lại ảnh: danh sách khách đã gửi sẽ mở khoá để sửa.</p>
+        : <p>Khách sẽ thấy ảnh trong thư mục “{finalFolder}” ở tab Ảnh hoàn thiện và được thông báo album đã trả.</p>,
+      confirm: "Đổi trạng thái",
+    }))) return;
     setBusy(true); setError("");
     try {
       await api(`/admin/projects/${project.id}/workflow`, json("PATCH", {
@@ -61,7 +71,7 @@ export default function WorkflowCard({ project, finalFolder, onSaved }: { projec
     <small className="muted">0 = khách chỉ thả tim, không giới hạn. Ảnh trong thư mục “{finalFolder}” hiện cho khách ở tab Ảnh hoàn thiện khi trạng thái là Đã trả ảnh.</small>
     <label>Lời nhắn hiển thị cho khách
       <textarea rows={3} maxLength={2000} value={message} onChange={e => setMessage(e.target.value)} placeholder="Ví dụ: Anh chị chọn 40 ảnh để studio chỉnh sửa nhé." /></label>
-    <button className="wide" disabled={busy} onClick={() => void save()}><Check size={16} /> Lưu quy trình</button>
+    <button className="wide" disabled={busy || disabled} title={disabled ? "Album đang lưu trữ" : undefined} onClick={() => void save()}><Check size={16} /> Lưu quy trình</button>
     {error && <p role="alert" className="alert">{error}</p>}
   </section>;
 }

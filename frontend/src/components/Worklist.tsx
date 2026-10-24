@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { CheckCircle2, Circle, Copy, Download, MessageCircle } from "lucide-react";
 import { api, copy, json } from "@/lib/api";
+import { useManager } from "./manager/context";
 import { isVideo } from "@/lib/media";
 
 type Item = { id: string; filename: string; extension: string; relative_path: string; status: string; missing: number; edit_done: boolean; note_count: number; notes: string | null };
@@ -10,12 +11,14 @@ type Data = { mode: "edit" | "favorites"; max_edit: number; search_string: strin
 // Editor's work screen: the customer's edit picks (or hearted photos when the album has no edit
 // limit), their notes, a per-photo "done" flag and a Lightroom/Bridge filename filter.
 export default function Worklist({ projectId, revision, onReply, onOpen }: {
-  projectId: string; revision: number; onReply: () => void; onOpen: (photo: Item) => void;
+  projectId: string; revision: number; onReply: () => void; onOpen: (photo: Item, all: Item[]) => void;
 }) {
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [onlyOpen, setOnlyOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const { confirm } = useManager();
   useEffect(() => {
     const controller = new AbortController();
     api<Data>(`/admin/projects/${projectId}/worklist`, { signal: controller.signal }).then(setData)
@@ -32,6 +35,17 @@ export default function Worklist({ projectId, revision, onReply, onOpen }: {
       setData(d => d && { ...d, done: d.done + (item.edit_done ? 1 : -1), photos: d.photos.map(p => p.id === item.id ? { ...p, edit_done: item.edit_done } : p) });
     }
   }
+  async function markAll() {
+    if (!data) return;
+    const todo = data.photos.filter(p => !p.edit_done);
+    if (!(await confirm({ title: "Đánh dấu tất cả đã xong", body: <p>Đánh dấu {todo.length} ảnh còn lại là đã chỉnh xong.</p>, confirm: "Đã xong hết" }))) return;
+    setBusy(true); setError("");
+    const results = await Promise.allSettled(todo.map(p => api(`/admin/photos/${p.id}/done`, json("PATCH", { done: true }))));
+    const ok = new Set(todo.filter((_, i) => results[i].status === "fulfilled").map(p => p.id));
+    setData(d => d && { ...d, done: d.done + ok.size, photos: d.photos.map(p => ok.has(p.id) ? { ...p, edit_done: true } : p) });
+    if (ok.size < todo.length) setError(`${todo.length - ok.size} ảnh chưa cập nhật được`); else setNotice(`Đã đánh dấu ${ok.size} ảnh xong`);
+    setBusy(false);
+  }
   if (!data) return <section className="panel"><p className="muted">{error || "Đang tải danh sách…"}</p></section>;
   const shown = onlyOpen ? data.photos.filter(p => !p.edit_done) : data.photos;
   const total = data.photos.length;
@@ -45,12 +59,13 @@ export default function Worklist({ projectId, revision, onReply, onOpen }: {
     <div className="worklist-actions">
       <button disabled={!data.search_string} onClick={() => void copy(data.search_string).then(() => setNotice("Đã chép tên file cho Lightroom")).catch(e => setError(e.message))}><Copy size={15} />Chép tên file</button>
       <a className="button" href={`/api/admin/projects/${projectId}/worklist?format=csv`}><Download size={15} />Xuất CSV kèm ghi chú</a>
+      {data.done < total && <button disabled={busy} onClick={() => void markAll()}><CheckCircle2 size={15} />Đánh dấu tất cả xong</button>}
       <label className="check-inline"><input type="checkbox" checked={onlyOpen} onChange={e => setOnlyOpen(e.target.checked)} />Chỉ ảnh chưa xong</label>
     </div>
     {!total ? <div className="empty"><p>Khách chưa chọn ảnh nào.</p></div> :
       <div className="worklist-grid">
         {shown.map(item => <article key={item.id} className={`worklist-item ${item.edit_done ? "done" : ""}`}>
-          <button type="button" className="worklist-thumb" onClick={() => onOpen(item)} aria-label={`Xem ${item.filename}`}>
+          <button type="button" className="worklist-thumb" onClick={() => onOpen(item, shown)} aria-label={`Xem ${item.filename}`}>
             {item.status === "ready" ? <img src={`/api/admin/photos/${item.id}/thumb`} alt="" loading="lazy" /> : <span className="photo-placeholder">Đang xử lý</span>}
             {isVideo(item) && <span className="media-badge">▶ VIDEO</span>}
           </button>

@@ -428,9 +428,26 @@ export default function Gallery({ token }: { token?: string }) {
   </div>;
 }
 
-export function Modal({ title, children, close, wide = false, closeLabel = 'Đóng' }: { title: string; children: React.ReactNode; close: () => void; wide?: boolean; closeLabel?: string }) {
-  return <div className="modal-backdrop" onClick={close}>
-    <section className={`modal ${wide ? 'modal-image-preview' : ''}`} role="dialog" aria-modal="true" aria-label={title} onClick={e => e.stopPropagation()}>
+// Stacked dialogs: Escape only closes the top one.
+const openModals: object[] = [];
+export function Modal({ title, children, close, wide = false, closeLabel = 'Đóng', dismissable = true }: { title: string; children: React.ReactNode; close: () => void; wide?: boolean; closeLabel?: string; dismissable?: boolean }) {
+  const box = useRef<HTMLElement>(null);
+  const closeRef = useRef(close);
+  closeRef.current = close;
+  // Escape closes (through `close`, so a dialog holding a one-time secret can still ask first);
+  // focus moves into the dialog and back to where it was when the dialog goes away.
+  useEffect(() => {
+    const before = document.activeElement as HTMLElement | null;
+    const first = box.current?.querySelector<HTMLElement>('[autofocus],input:not([type=hidden]):not([disabled]),textarea,select,button:not(.icon-button)');
+    (first || box.current)?.focus();
+    const me = {};
+    openModals.push(me);
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape' && openModals.at(-1) === me) { e.stopPropagation(); closeRef.current(); } };
+    document.addEventListener('keydown', key);
+    return () => { document.removeEventListener('keydown', key); openModals.splice(openModals.indexOf(me), 1); before?.focus?.(); };
+  }, []);
+  return <div className="modal-backdrop" onClick={dismissable ? close : undefined}>
+    <section ref={box} tabIndex={-1} className={`modal ${wide ? 'modal-image-preview' : ''}`} role="dialog" aria-modal="true" aria-label={title} onClick={e => e.stopPropagation()}>
       <div className="modal-heading"><h2>{title}</h2><button className="icon-button" onClick={close} aria-label={closeLabel}><X /></button></div>
       {children}
     </section>

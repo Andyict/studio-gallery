@@ -1,5 +1,6 @@
 import './globals.css';
 import './studio-theme.css';
+import './manager.css';
 import type { Viewport } from 'next';
 import ThemeSync from '@/components/ThemeSync';
 export const metadata={title:'Studio Gallery',description:'Không gian chọn ảnh riêng của bạn',robots:{index:false,follow:false},

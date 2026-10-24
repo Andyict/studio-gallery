@@ -31,7 +31,7 @@ export default function Dashboard({ revision, onOpenAlbum, onOpenInbox, onOpenCu
       <Card icon={<PenLine size={17} />} title="Đang chỉnh sửa" items={data.editing.map(a => ({ key: a.id, label: a.name, meta: [progress(a), a.due_at && `hạn ${date(a.due_at)}`].filter(Boolean).join(" · "), open: () => onOpenAlbum(a.id, "worklist") }))} />
       <Card icon={<MessageCircle size={17} />} title="Tin nhắn chưa đọc" items={data.unread.map(c => ({ key: c.id, label: c.name, meta: `${c.n} tin mới`, open: () => onOpenInbox(c.id) }))} />
       <Card icon={<StickyNote size={17} />} title="Ghi chú ảnh chưa xử lý" items={data.open_notes.map(c => ({ key: c.id, label: c.name, meta: `${c.n} ghi chú`, open: () => onOpenAlbum(c.id, "worklist") }))} />
-      <Card icon={<ImageOff size={17} />} title="Ảnh chưa tạo được thumbnail" items={data.failed.map(c => ({ key: c.id, label: c.name, meta: `${c.n} ảnh lỗi`, open: () => onOpenAlbum(c.id, "settings") }))} />
+      <Card icon={<ImageOff size={17} />} title="Ảnh chưa tạo được ảnh xem" items={data.failed.map(c => ({ key: c.id, label: c.name, meta: `${c.n} ảnh lỗi`, open: () => onOpenAlbum(c.id, "overview") }))} />
       {data.customers_without_pin > 0 && <section className="panel dashboard-card warn"><h3><KeyRound size={17} />Khách chưa có PIN</h3>
         <p className="small">{data.customers_without_pin} khách có link nhưng chưa đăng nhập được trang chủ.</p>
         <button className="text-button" onClick={onOpenCustomers}>Cấp PIN trong mục Khách hàng</button></section>}

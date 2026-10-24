@@ -5,6 +5,7 @@ import { api, copy, json } from "@/lib/api";
 import { inviteMessage } from "@/lib/invite";
 import PasswordField from "./PasswordField";
 import { Modal } from "./Gallery";
+import { useManager } from "./manager/context";
 
 type Folder = { id: string; relative_path: string };
 type Created = { url: string; portal: string | null; pin: string | null; phone: string | null; customer: { name: string; phone_last4: string; has_pin: boolean } | null };
@@ -32,11 +33,17 @@ export default function ShareDialog({ projectId, projectName, folders, brand, on
       setExpires(d.expiryDays ? new Date(t.getTime() - t.getTimezoneOffset() * 60000).toISOString().slice(0, 16) : "");
     }).catch(e => setError((e as Error).message)).finally(() => setBusy(false));
   }, []);
+  const [saved, setSaved] = useState(false);
+  const { confirm } = useManager();
+  // The link and PIN are shown once: closing before copying them asks first.
+  async function closeCreated() {
+    if (saved || await confirm({ title: "Đóng mà chưa sao chép?", body: <p>Link{created?.pin ? " và mã PIN" : ""} chỉ hiển thị lần này. Sau khi đóng, muốn gửi lại cho khách phải tạo link mới{created?.pin ? " hoặc cấp PIN mới" : ""}.</p>, confirm: "Vẫn đóng", danger: true })) onClose();
+  }
   async function run(fn: () => Promise<void>) { setBusy(true); setError(""); try { await fn(); } catch (e) { setError((e as Error).message); } finally { setBusy(false); } }
 
   if (created) {
     const message = created.customer && inviteMessage({ customer: created.customer.name, album: projectName, origin: created.portal || window.location.origin, phone: created.phone, pin: created.pin, url: created.url, studio: brand });
-    return <Modal title="Link đã sẵn sàng" close={onClose}>
+    return <Modal title="Link đã sẵn sàng" close={() => void closeCreated()} dismissable={false}>
       <p className="muted">Lưu link này trước khi đóng. Bạn có thể thu hồi quyền bất cứ lúc nào.</p>
       <textarea readOnly value={created.url} rows={3} />
       {created.customer && <div className="share-customer">
@@ -44,10 +51,10 @@ export default function ShareDialog({ projectId, projectName, folders, brand, on
           {!created.pin && (created.customer.has_pin ? " — dùng mã PIN khách đã có." : " — chưa có PIN, cấp trong mục Khách hàng.")}</p>
         {created.pin && <><span className="tiny-label">MÃ PIN (CHỈ HIỂN THỊ LẦN NÀY)</span><div className="pin-display">{created.pin}</div></>}
         <label>Tin nhắn gửi khách<textarea readOnly rows={7} value={message!} /></label>
-        <button onClick={() => void run(async () => { await copy(message!); onNotice("Đã chép tin nhắn gửi khách"); })}><Copy size={16} />Chép tin nhắn</button>
+        <button onClick={() => void run(async () => { await copy(message!); setSaved(true); onNotice("Đã chép tin nhắn gửi khách"); })}><Copy size={16} />Chép tin nhắn</button>
       </div>}
       <div className="row">
-        <button className="primary" onClick={() => void run(async () => { await copy(created.url); onNotice("Đã sao chép link"); })}><Copy size={16} />Sao chép</button>
+        <button className="primary" onClick={() => void run(async () => { await copy(created.url); setSaved(true); onNotice("Đã sao chép link"); })}><Copy size={16} />Sao chép</button>
         <a className="button" href={created.url} target="_blank" rel="noreferrer">Mở gallery <ArrowUpRight size={16} /></a>
       </div>
       {error && <p className="alert">{error}</p>}
@@ -76,7 +83,7 @@ export default function ShareDialog({ projectId, projectName, folders, brand, on
       <div className="scope-list">{folders.map(f => <label className="check-label" key={f.id}>
         <input type="checkbox" checked={scope.includes(f.id)} onChange={e => setScope(v => e.target.checked ? [...v, f.id] : v.filter(x => x !== f.id))} />
         {f.relative_path || "Toàn bộ cây thư mục"}</label>)}</div>
-      <label className="check-label"><input type="checkbox" checked={downloads} onChange={e => setDownloads(e.target.checked)} />Cho tải preview</label>
+      <label className="check-label"><input type="checkbox" checked={downloads} onChange={e => setDownloads(e.target.checked)} />Cho tải ảnh xem</label>
       <label className="check-label"><input type="checkbox" checked={originals} disabled={!downloads} onChange={e => setOriginals(e.target.checked)} />Cho tải file gốc JPG / RAW</label>
       <button className="primary wide" disabled={busy}>Tạo quyền truy cập <LinkIcon size={16} /></button>
     </form>

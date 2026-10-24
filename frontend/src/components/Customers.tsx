@@ -4,6 +4,7 @@ import { Copy, KeyRound, Lock, LockOpen, Plus, Search, UserRound } from "lucide-
 import { api, copy, json } from "@/lib/api";
 import { inviteMessage } from "@/lib/invite";
 import { Modal } from "./Gallery";
+import { useManager } from "./manager/context";
 
 type Customer = {
   id: string; name: string; phone_last4: string; note: string; disabled: boolean; has_pin: boolean; locked: boolean;
@@ -14,6 +15,7 @@ type Issued = { customer: string; phone?: string; pin: string };
 // Customer accounts (phone + PIN). Staff create accounts, issue or reset PINs, unlock after too many
 // wrong attempts and disable accounts. A new PIN is shown once, with a ready-to-send message.
 export default function Customers({ onOpenAlbum }: { onOpenAlbum: (id: string) => void }) {
+  const { confirm } = useManager();
   const [rows, setRows] = useState<Customer[] | null>(null);
   const [search, setSearch] = useState("");
   const [busy, setBusy] = useState(false);
@@ -27,7 +29,8 @@ export default function Customers({ onOpenAlbum }: { onOpenAlbum: (id: string) =
   useEffect(() => { setOrigin(window.location.origin); api("/config").then(c => setStudio(c.studioName || c.name)).catch(() => {}); }, []);
   useEffect(() => { const t = setTimeout(() => void load(search).catch(e => setError(e.message)), 250); return () => clearTimeout(t); }, [search, load]);
   async function run(fn: () => Promise<void>) { setBusy(true); setError(""); try { await fn(); } catch (e) { setError((e as Error).message); } finally { setBusy(false); } }
-  const resetPin = (c: Customer) => run(async () => { const d = await api(`/admin/customers/${c.id}/pin`, json("POST", {})); setIssued({ customer: c.name, pin: d.pin }); await load(search); });
+  const resetPin = (c: Customer) => run(async () => {
+    if (c.has_pin && !(await confirm({ title: "Cấp PIN mới", body: <p>Mã PIN cũ của {c.name} hết hiệu lực ngay; khách cần mã mới để đăng nhập.</p>, confirm: "Cấp PIN mới" }))) return; const d = await api(`/admin/customers/${c.id}/pin`, json("POST", {})); setIssued({ customer: c.name, pin: d.pin }); await load(search); });
   return <section className="panel customers-panel">
     <div className="panel-title">
       <div><h2>Khách hàng</h2><p className="muted small">Khách đăng nhập bằng số điện thoại + mã PIN và thấy mọi album được chia sẻ cho mình.</p></div>
@@ -67,6 +70,8 @@ export default function Customers({ onOpenAlbum }: { onOpenAlbum: (id: string) =
     </form></Modal>}
 
     {editing && <Modal title="Sửa thông tin khách" close={() => setEditing(null)}><form onSubmit={e => { e.preventDefault(); void run(async () => {
+      const before = rows?.find(r => r.id === editing.id);
+      if (editing.disabled && !before?.disabled && !(await confirm({ title: "Khoá tài khoản khách", body: <p>{editing.name} bị đăng xuất khỏi mọi thiết bị và không đăng nhập được cho tới khi bạn mở lại.</p>, confirm: "Khoá tài khoản", danger: true }))) return;
       await api(`/admin/customers/${editing.id}`, json("PATCH", { name: editing.name, note: editing.note, disabled: editing.disabled })); setEditing(null); await load(search);
     }); }}>
       <label>Tên khách<input required maxLength={120} value={editing.name} onChange={e => setEditing({ ...editing, name: e.target.value })} /></label>
@@ -81,9 +86,11 @@ export default function Customers({ onOpenAlbum }: { onOpenAlbum: (id: string) =
 
 export function PinIssued({ issued, origin, studio, album, url, close }: { issued: Issued; origin: string; studio?: string; album?: string; url?: string; close: () => void }) {
   const [copied, setCopied] = useState("");
+  const { confirm } = useManager();
+  const tryClose = async () => { if (copied || await confirm({ title: "Đóng mà chưa sao chép?", body: <p>Mã PIN chỉ hiển thị lần này. Nếu chưa gửi cho khách, bạn sẽ phải cấp PIN mới.</p>, confirm: "Vẫn đóng", danger: true })) close(); };
   const message = inviteMessage({ customer: issued.customer, album, origin, phone: issued.phone, pin: issued.pin, url, studio });
   const copyText = (text: string, what: string) => void copy(text).then(() => setCopied(what)).catch(() => setCopied(""));
-  return <Modal title="Mã PIN của khách" close={close}>
+  return <Modal title="Mã PIN của khách" close={() => void tryClose()} dismissable={false}>
     <p className="muted">Mã PIN chỉ hiển thị lần này. Gửi cho khách qua Zalo hoặc SMS; nếu mất, hãy cấp PIN mới.</p>
     <div className="pin-display" aria-label="Mã PIN">{issued.pin}</div>
     <label>Tin nhắn gửi khách<textarea readOnly rows={8} value={message} /></label>

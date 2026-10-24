@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import ScanSchedule from "./ScanSchedule";
 import UpdateCard from "./UpdateCard";
 import NotifySettings from "./NotifySettings";
@@ -23,15 +23,26 @@ import {
 import { api, json } from "@/lib/api";
 import { Modal } from "./Gallery";
 import PasswordField from "./PasswordField";
+import { useManager } from "./manager/context";
+
+const AUDIT_LABELS: Record<string, string> = {
+  "settings.update": "Đổi cài đặt", "settings.logo_update": "Đổi logo", "settings.logo_remove": "Gỡ logo",
+  "user.create": "Tạo tài khoản", "user.update": "Sửa tài khoản", "user.password_reset": "Đặt lại mật khẩu",
+  "account.password_change": "Đổi mật khẩu cá nhân", "album.archive": "Lưu trữ album", "album.restore": "Khôi phục album",
+  "album.delete": "Xoá album", "album.assign": "Phân công album", "setup.complete": "Thiết lập lần đầu",
+};
 export default function SystemSettings({
   me,
   onSaved,
   initialTab = "general",
+  onTabChange,
 }: {
   me: any;
   onSaved: () => void;
   initialTab?: string;
+  onTabChange?: (tab: string) => void;
 }) {
+  const { projects, confirm } = useManager();
   const [tab, setTab] = useState("account"),
     [data, setData] = useState<any>(null),
     [users, setUsers] = useState<any[]>([]),
@@ -40,6 +51,8 @@ export default function SystemSettings({
     [notice, setNotice] = useState(""),
     [busy, setBusy] = useState(false),
     [savedSettings, setSavedSettings] = useState<any>(null);
+  const savedRef = useRef<string | null>(null);
+  savedRef.current = savedSettings;
   const [edit, setEdit] = useState<any>(null),
     [reset, setReset] = useState<any>(null),
     [newPassword, setNewPassword] = useState(""),
@@ -66,6 +79,10 @@ export default function SystemSettings({
     setTab(me.role === "admin" ? initialTab : "account");
     void load().catch((e) => setError(e.message));
   }, [me.role, initialTab]);
+  // Leaving the page without saving drops a previewed theme.
+  useEffect(() => () => {
+    try { const saved = savedRef.current && JSON.parse(savedRef.current).theme; if (saved) document.documentElement.dataset.studioTheme = saved; } catch { /* ignore */ }
+  }, []);
   // The theme is a studio setting (customers see it too); picking one previews it until saved.
   function changeTheme(value: string) {
     update("theme", value);
@@ -133,6 +150,7 @@ export default function SystemSettings({
             className={tab === key ? "active" : ""}
             onClick={() => {
               setTab(key);
+              onTabChange?.(key);
               setError("");
               setNotice("");
             }}
@@ -215,12 +233,12 @@ export default function SystemSettings({
                             await api("/admin/logo", { method: "DELETE" });
                             await load();
                             onSaved();
-                            setNotice("Đã xóa logo studio.");
+                            setNotice("Đã xoá logo studio.");
                           })
                         }
                       >
                         <Trash2 size={15} />
-                        Xóa logo
+                        Xoá logo
                       </button>
                     )}
                   </div>
@@ -348,7 +366,7 @@ export default function SystemSettings({
                     if (!e.target.checked) update("defaultOriginals", false);
                   }}
                 />
-                Cho tải preview mặc định
+                Cho tải ảnh xem mặc định
               </label>
               <label className="check-label">
                 <input
@@ -420,6 +438,16 @@ export default function SystemSettings({
                   <div className="grow">
                     <strong>{source.label}</strong>
                     <small>/{source.relative_path || ""}</small>
+                    {source.enabled && <small className="muted">{source.last_discovered_at ? `Quét tạo album lần cuối ${new Date(source.last_discovered_at).toLocaleString("vi-VN")}` : "Chưa quét tạo album"}</small>}
+                    {source.enabled && (
+                      <label className="check-inline">
+                        <input type="checkbox" checked={!!source.auto_scan} disabled={busy} onChange={(e) => void action(async () => {
+                          await api(`/admin/sources/${source.id}/options`, json("PATCH", { auto_scan: e.target.checked }));
+                          await load();
+                        })} />
+                        Tự tạo album khi có thư mục mới
+                      </label>
+                    )}
                   </div>
                   <span className={`tag ${source.enabled ? "green" : ""}`}>
                     {source.enabled ? "Đang bật" : "Đã tắt"}
@@ -447,6 +475,7 @@ export default function SystemSettings({
                     disabled={busy}
                     onClick={() =>
                       void action(async () => {
+                        if (source.enabled && !(await confirm({ title: "Tắt nguồn ảnh", body: <p>Không duyệt được và không tạo album mới từ “{source.label}”. Album đã có vẫn giữ nguyên.</p>, confirm: "Tắt nguồn", danger: true }))) return;
                         await api(
                           `/admin/sources/${source.id}`,
                           json("PATCH", {
@@ -574,8 +603,9 @@ export default function SystemSettings({
             </button>
           </div>
           <p className="muted small">
-            Quản trị viên có toàn quyền. Nhân viên được xem và quản lý tất cả bộ
-            ảnh, link, lựa chọn và ghi chú; không được sửa hệ thống hay quản lý
+            Quản trị viên có toàn quyền. Nhân viên “mọi album” xem và quản lý mọi
+            album, link, lựa chọn và ghi chú; nhân viên “chỉ album được giao” chỉ
+            thấy album được phân công. Nhân viên không sửa cài đặt hay quản lý
             người dùng.
           </p>
           <div className="table-scroll">
@@ -597,7 +627,7 @@ export default function SystemSettings({
                     <td>
                       {u.role === "admin" ? "Quản trị viên" : u.album_scope === "assigned" ? "Nhân viên • album được giao" : "Nhân viên"}
                     </td>
-                    <td>{u.disabled ? "Đã khóa" : "Hoạt động"}</td>
+                    <td>{u.disabled ? "Đã khoá" : "Hoạt động"}</td>
                     <td>
                       <div className="row">
                         <button
@@ -693,7 +723,7 @@ export default function SystemSettings({
             <table>
               <thead>
                 <tr>
-                  <th>Thời gian UTC</th>
+                  <th>Thời gian</th>
                   <th>Tài khoản</th>
                   <th>Thao tác</th>
                   <th>Đối tượng</th>
@@ -702,22 +732,15 @@ export default function SystemSettings({
               <tbody>
                 {audit.map((a) => (
                   <tr key={a.id}>
-                    <td>{a.created_at}</td>
+                    <td>{new Date(a.created_at).toLocaleString("vi-VN")}</td>
                     <td>{a.username || "—"}</td>
                     <td>
-                      {(
-                        {
-                          "settings.update": "Đổi cài đặt",
-                          "user.create": "Tạo tài khoản",
-                          "user.update": "Sửa tài khoản",
-                          "user.password_reset": "Đặt lại mật khẩu",
-                          "account.password_change": "Đổi mật khẩu cá nhân",
-                        } as any
-                      )[a.action] || a.action}
+                      {AUDIT_LABELS[a.action] || a.action}
                     </td>
                     <td>
                       {users.find((u) => u.id === a.target)?.username ||
-                        a.target ||
+                        projects.find((p) => p.id === a.target)?.name ||
+                        (a.action === "album.delete" ? String(a.target || "").split(" ").slice(1).join(" ") : a.target) ||
                         "Hệ thống"}
                     </td>
                   </tr>
@@ -737,6 +760,8 @@ export default function SystemSettings({
             onSubmit={(e) => {
               e.preventDefault();
               void action(async () => {
+                const before = users.find((u) => u.id === edit.id);
+                if (edit.id && edit.disabled && !before?.disabled && !(await confirm({ title: "Khoá tài khoản nhân viên", body: <p>{edit.name} bị đăng xuất khỏi mọi thiết bị và không đăng nhập được cho tới khi được mở lại.</p>, confirm: "Khoá tài khoản", danger: true }))) return;
                 if (edit.id)
                   await api(
                     `/admin/users/${edit.id}`,
@@ -832,7 +857,7 @@ export default function SystemSettings({
                     setEdit({ ...edit, disabled: e.target.checked })
                   }
                 />
-                Khóa tài khoản (đăng xuất mọi phiên)
+                Khoá tài khoản (đăng xuất mọi phiên)
               </label>
             )}
             <button className="primary wide" disabled={busy}>
