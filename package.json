@@ -1,14 +1,16 @@
 {
   "name": "nas-photo-proofing",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.3.0",
   "type": "module",
   "scripts": {
     "test": "node --test backend/test/*.test.mjs",
     "build": "npm --prefix frontend run build",
     "dev:api": "npm --prefix backend run dev",
     "dev:web": "npm --prefix frontend run dev",
-    "demo": "node scripts/demo.mjs"
+    "demo": "node scripts/demo.mjs",
+    "spk": "node scripts/build-spk.mjs",
+    "e2e": "node --test --test-concurrency=1 \"e2e/*.e2e.mjs\""
   },
   "engines": {
     "node": ">=24.0.0"
@@ -20,6 +22,7 @@
     "fastify": "^5.6.0",
     "lucide-react": "^0.577.0",
     "next": "^16.1.0",
+    "nodemailer": "6.10.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "sharp": "0.35.4",

@@ -6,10 +6,19 @@ import os from 'node:os';
 import sharp from 'sharp';
 import {createApp} from '../src/app.mjs';
 import {cleanRelative,safePath} from '../src/security.mjs';
+import {nextScan} from '../src/scanner.mjs';
 
 test('path validation rejects traversal, absolute paths and Windows escapes',()=>{
   for(const p of ['../private','a/../b','/etc/passwd','C:/private','a\\b','a\0b'])assert.throws(()=>cleanRelative(p));
   assert.equal(cleanRelative('wedding/ceremony'),'wedding/ceremony');
+});
+
+test('minute-based scan schedules resolve to the next matching minute',()=>{
+  for(const [cron,minutes] of [['*/2 * * * *',2],['*/10 * * * *',10],['*/30 * * * *',30],['0 */2 * * *',120]]){
+    const wait=new Date(nextScan(cron,'Asia/Ho_Chi_Minh'))-Date.now();
+    assert.ok(wait>0&&wait<=minutes*60_000,`${cron} fires within ${minutes} minutes`);
+  }
+  assert.equal(nextScan('','Asia/Ho_Chi_Minh'),null);
 });
 
 test('end-to-end: scan, scope, proofing, previews, ZIP, revocation, missing sources',async t=>{
@@ -40,8 +49,13 @@ test('end-to-end: scan, scope, proofing, previews, ZIP, revocation, missing sour
   assert.equal((await request('POST',`/api/share/${token}/unlock`,{name:'An',password:'bad'})).statusCode,401);
   const unlocked=await request('POST',`/api/share/${token}/unlock`,{name:'An',password:'2468'});assert.equal(unlocked.statusCode,200,unlocked.body);
   const client=unlocked.headers['set-cookie'].split(';')[0];
-  const portal=await request('POST','/api/access',{phone:'090 123 4567'});assert.equal(portal.statusCode,200,portal.body);assert.equal(portal.json().url,'/album');
-  assert.equal((await request('POST','/api/access',{phone:'0900000000'})).statusCode,401);
+  // Phone alone no longer opens an album: the customer signs in with phone + the PIN issued with the link.
+  assert.match(share.pin,/^\d{6}$/);
+  assert.equal((await request('POST','/api/customer/login',{phone:'090 123 4567',pin:'000000'})).statusCode,401);
+  const portal=await request('POST','/api/customer/login',{phone:'090 123 4567',pin:share.pin});assert.equal(portal.statusCode,200,portal.body);
+  const customer=portal.headers['set-cookie'].split(';')[0];
+  const albums=(await request('GET','/api/customer/albums',undefined,customer)).json();assert.equal(albums.length,1);assert.equal(albums[0].photo_count,2,'counts only photos inside the link scope');
+  assert.equal((await request('POST',`/api/customer/albums/${albums[0].link_id}/open`,{},customer)).json().url,'/album');
   const gallery=(await request('GET',`/api/client/gallery?token=${token}`,undefined,client)).json();assert.equal(gallery.folders.length,2);
   const photos=(await request('GET','/api/client/photos',undefined,client)).json().photos;assert.equal(photos.length,2);
   const denied=db.get("SELECT id FROM photos WHERE filename='PRIVATE.jpg'").id;
@@ -57,27 +71,28 @@ test('end-to-end: scan, scope, proofing, previews, ZIP, revocation, missing sour
   await request('POST',`/api/client/lists/${list}/submit`,{submitted:true},client);assert.equal((await set(false)).statusCode,409);
   await request('POST',`/api/client/lists/${list}/submit`,{submitted:false},client);assert.equal((await set(false)).statusCode,200);await set(true);
   const exported=(await request('GET',`/api/client/lists/${list}/export`,undefined,client)).json();assert.match(exported.search_string,/IMG_00/);
-  assert.equal((await request('POST',`/api/client/photos/${photos[0].id}/comments`,{x:1.2,y:0.3,body:'bad'},client)).statusCode,400);
-  assert.equal((await request('POST',`/api/client/photos/${photos[0].id}/comments`,{x:0.25,y:0.5,body:'Làm sáng vùng mặt'},client)).statusCode,200);
-  assert.equal((await request('GET',`/api/client/photos/${photos[0].id}/comments`,undefined,other)).json().length,1);
+  assert.equal((await request('POST','/api/client/messages',{photo_id:photos[0].id,x:1.2,y:0.3,body:'bad'},client)).statusCode,400);
+  assert.equal((await request('POST','/api/client/messages',{photo_id:photos[0].id,x:0.25,y:0.5,body:'Làm sáng vùng mặt'},client)).statusCode,200);
+  assert.equal((await request('GET',`/api/client/messages?photo_id=${photos[0].id}`,undefined,other)).json().length,1);
   const inbox=(await request('GET','/api/admin/inbox',undefined,admin)).json();
   assert.equal(inbox.some(item=>item.kind==='comment'&&item.photo_id===photos[0].id),true);
-  assert.equal((await request('POST','/api/client/chat',{body:'Khi nào nhận ảnh?'},client)).statusCode,200);
+  assert.equal((await request('POST','/api/client/messages',{body:'Khi nào nhận ảnh?'},client)).statusCode,200);
   assert.equal((await request('GET','/api/admin/inbox',undefined,admin)).json().some(item=>item.kind==='message'&&item.body==='Khi nào nhận ảnh?'),true);
   assert.equal((await request('GET','/api/admin/projects',undefined,admin)).json().some(item=>item.unread_message_count>0),true);
   const chats=(await request('GET','/api/admin/chats',undefined,admin)).json();
   assert.equal(chats.length,1);
   assert.equal(chats[0].last_body,'Khi nào nhận ảnh?');
-  const thread=(await request('GET',`/api/admin/projects/${pid}/chat`,undefined,admin)).json();
-  await request('POST','/api/client/chat',{body:'Thêm một tin mới'},client);
-  await request('PATCH',`/api/admin/projects/${pid}/chat/read`,{ids:thread.map(m=>m.id)},admin);
+  assert.equal(chats[0].unread_count,2,'photo notes and chat both count as new activity');
+  const thread=(await request('GET',`/api/admin/projects/${pid}/messages`,undefined,admin)).json();
+  await request('POST','/api/client/messages',{body:'Thêm một tin mới'},client);
+  await request('POST',`/api/admin/projects/${pid}/messages/read`,{upto:thread.at(-1).seq},admin);
   assert.equal((await request('GET','/api/admin/chats',undefined,admin)).json()[0].unread_count,1);
-  await request('PATCH',`/api/admin/projects/${pid}/chat/read`,{},admin);
+  await request('POST',`/api/admin/projects/${pid}/messages/read`,{},admin);
   assert.equal((await request('GET','/api/admin/chats',undefined,admin)).json()[0].unread_count,0);
-  await request('POST',`/api/admin/projects/${pid}/chat`,{body:'Studio sẽ gửi chiều nay'},admin);
-  const history=(await request('GET','/api/client/chat',undefined,client)).json();
+  await request('POST',`/api/admin/projects/${pid}/messages`,{body:'Studio sẽ gửi chiều nay'},admin);
+  const history=(await request('GET','/api/client/messages?scope=chat',undefined,client)).json();
   assert.equal(history.length,3);
-  assert.equal(history.some(m=>m.sender_role==='admin'&&m.body==='Studio sẽ gửi chiều nay'),true);
+  assert.equal(history.some(m=>m.author_role==='staff'&&m.body==='Studio sẽ gửi chiều nay'),true);
   assert.equal((await request('GET','/api/admin/chats',undefined,admin)).json().length,1);
   const ticket=await request('POST','/api/client/downloads',{list_id:list,original:true},client);assert.equal(ticket.statusCode,200,ticket.body);
   const zip=await request('GET',ticket.json().url,undefined,client);assert.equal(zip.statusCode,200,zip.body.slice(0,100));assert.equal(zip.rawPayload.readUInt32LE(0),0x04034b50);assert.ok(zip.rawPayload.includes(jpg));assert.ok(!zip.rawPayload.includes(Buffer.from('PRIVATE.jpg')));assert.ok(zip.rawPayload.includes(Buffer.from('IMG_00')));

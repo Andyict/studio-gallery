@@ -9,8 +9,8 @@
   --light: #eaf4ef;
   --accent: #b2cfbe;
 }
-[data-studio-theme="sand"] { --bg:#f6f1e8; --paper:#fffdf8; --light:#f4ead9; --accent:#d8b985; }
-[data-studio-theme="midnight"] { --bg:#e9efed; --paper:#f8fbfa; --ink:#1c302b; --green:#245f55; --light:#dcebe6; --accent:#8fb9af; }
+:root[data-studio-theme="sand"] { --bg:#f6f1e8; --paper:#fffdf8; --light:#f4ead9; --accent:#d8b985; }
+:root[data-studio-theme="midnight"] { --bg:#e9efed; --paper:#f8fbfa; --ink:#1c302b; --green:#245f55; --light:#dcebe6; --accent:#8fb9af; }
 [data-studio-theme="sand"] body { background: radial-gradient(circle at 8% 0%,#eee1c9,transparent 32%),radial-gradient(circle at 92% 12%,#f7e9d3,transparent 30%),linear-gradient(135deg,#fbf7ef,#f0e8da); }
 [data-studio-theme="midnight"] body { background: radial-gradient(circle at 8% 0%,#d8e8e3,transparent 32%),radial-gradient(circle at 92% 12%,#cedfe3,transparent 30%),linear-gradient(135deg,#eff5f2,#e2ecee); }
 body {
@@ -379,7 +379,8 @@ button, input, textarea, select { font-family: inherit; }
   .proof-bar { width: calc(100% - 20px); bottom: 10px; padding: 12px; gap: 10px; }
   .proof-bar strong { font-size: 12px; }
   .proof-actions { gap: 8px; }
-  .proof-actions .text-button { display: none; }
+  .proof-actions .text-button { padding: 8px; min-width: 36px; justify-content: center; }
+  .proof-actions .text-button span { display: none; }
   .proof-actions .primary { font-size: 12px; padding: 10px; }
   .notes-panel { padding: 20px; }
   .modal { padding: 20px; }

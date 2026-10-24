@@ -1,5 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
+import ScanSchedule from "./ScanSchedule";
+import UpdateCard from "./UpdateCard";
+import NotifySettings from "./NotifySettings";
 import {
   Save,
   Plus,
@@ -40,10 +43,10 @@ export default function SystemSettings({
   const [edit, setEdit] = useState<any>(null),
     [reset, setReset] = useState<any>(null),
     [newPassword, setNewPassword] = useState(""),
+    [resetPassword, setResetPassword] = useState(""),
     [currentPassword, setCurrentPassword] = useState("");
   const [directory, setDirectory] = useState<any>(null),
     [sources, setSources] = useState<any[]>([]);
-  const [theme, setTheme] = useState("sage");
   async function load() {
     if (me.role === "admin") {
       const [d, u, a, src] = await Promise.all([
@@ -63,14 +66,9 @@ export default function SystemSettings({
     setTab(me.role === "admin" ? initialTab : "account");
     void load().catch((e) => setError(e.message));
   }, [me.role, initialTab]);
-  useEffect(() => {
-    const saved = window.localStorage.getItem("studio-theme") || "sage";
-    setTheme(saved);
-    document.documentElement.dataset.studioTheme = saved;
-  }, []);
+  // The theme is a studio setting (customers see it too); picking one previews it until saved.
   function changeTheme(value: string) {
-    setTheme(value);
-    window.localStorage.setItem("studio-theme", value);
+    update("theme", value);
     document.documentElement.dataset.studioTheme = value;
   }
   async function action(fn: () => Promise<void>) {
@@ -89,6 +87,7 @@ export default function SystemSettings({
     setData((d: any) => ({ ...d, settings: { ...d.settings, [k]: v } }));
   }
   const s = data?.settings;
+  const theme = s?.theme || "sage";
   const dirty = Boolean(s && savedSettings && JSON.stringify(s) !== savedSettings);
   const tabs =
     me.role === "admin"
@@ -96,6 +95,7 @@ export default function SystemSettings({
           ["general", "Chung"],
           ["defaults", "Quét & chia sẻ"],
           ["source", "Nguồn ảnh"],
+          ["notify", "Thông báo"],
           ["users", "Nhân viên"],
           ["account", "Tài khoản của tôi"],
           ["audit", "Nhật ký"],
@@ -152,7 +152,8 @@ export default function SystemSettings({
           {error}
         </p>
       )}
-      {(tab === "general" || tab === "defaults") && s && (
+      {tab === "general" && me.role === "admin" && <UpdateCard />}
+      {(tab === "general" || tab === "defaults" || tab === "notify") && s && (
         <form
           className="panel settings-panel"
           onSubmit={(e) => {
@@ -160,7 +161,9 @@ export default function SystemSettings({
             void action(save);
           }}
         >
-          {tab === "general" ? (
+          {tab === "notify" ? (
+            <NotifySettings s={s} update={update} dirty={dirty} />
+          ) : tab === "general" ? (
             <>
               <h2>Thông tin studio</h2>
               <p className="muted small">
@@ -276,16 +279,43 @@ export default function SystemSettings({
           ) : (
             <>
               <h2>Mặc định cho bộ ảnh mới</h2>
+              <ScanSchedule value={s.defaultCron || ""} onChange={(value) => update("defaultCron", value)} />
               <label>
-                Lịch quét cron
-                <input
-                  type="time"
-                  value={(() => { const m = String(s.defaultCron || "").match(/^(\d{1,2})\s+(\d{1,2})\s+\*/); return m ? `${String(Number(m[2])).padStart(2,"0")}:${String(Number(m[1])).padStart(2,"0")}` : ""; })()}
-                  onChange={(e) => { const [hour, minute] = e.target.value.split(":"); update("defaultCron", `${Number(minute)} ${Number(hour)} * * *`); }}
-                />
+                Thư mục ảnh hoàn thiện
+                <input value={s.finalFolder || ""} maxLength={80} onChange={(e) => update("finalFolder", e.target.value)} placeholder="Final" />
               </label>
               <small className="muted">
-                Chọn giờ chạy quét tự động mỗi ngày. Để trống nếu chỉ muốn đồng bộ thủ công.
+                Thư mục con trong mỗi album chứa ảnh đã chỉnh sửa. Khách chỉ thấy khi album ở trạng thái Đã trả ảnh.
+              </small>
+              <label className="check-label">
+                <input type="checkbox" checked={s.pairRawJpg !== false} onChange={(e) => update("pairRawJpg", e.target.checked)} />
+                Gộp ảnh RAW và JPG cùng tên thành một ảnh (tải file gốc sẽ kèm file RAW)
+              </label>
+              <label>
+                Watermark trên ảnh xem trước
+                <select value={s.watermark || "off"} onChange={(e) => update("watermark", e.target.value)} disabled={!data?.logoUrl}>
+                  <option value="off">Không đóng dấu</option>
+                  <option value="corner">Logo ở góc dưới phải</option>
+                  <option value="center">Logo lớn giữa ảnh</option>
+                  <option value="tile">Logo lặp kín ảnh</option>
+                </select>
+              </label>
+              {s.watermark && s.watermark !== "off" && (
+                <label>
+                  Độ đậm watermark: {s.watermarkOpacity ?? 25}%
+                  <input type="range" min={5} max={80} step={5} value={s.watermarkOpacity ?? 25} onChange={(e) => update("watermarkOpacity", Number(e.target.value))} />
+                </label>
+              )}
+              <small className="muted">
+                {data?.logoUrl ? "Dùng logo studio (tab Chung). Áp dụng cho ảnh xem trước 2048px và ZIP bản xem; thumbnail, file gốc và video không bị đóng dấu. Đổi kiểu, độ đậm hoặc logo sẽ tạo lại ảnh xem trước." : "Tải logo studio ở tab Chung để bật watermark."}
+              </small>
+              <label>
+                Giới hạn cache ảnh xem trước (GB)
+                <input type="number" min={0} step={1} value={Math.round((s.previewCacheMB ?? 20480) / 1024)} onChange={(e) => update("previewCacheMB", Math.max(0, Math.round(Number(e.target.value) || 0)) * 1024)} />
+              </label>
+              <small className="muted">
+                Ảnh xem trước 2048px chỉ được tạo khi có người mở ảnh; khi vượt giới hạn, ảnh lâu không xem bị xoá trước (0 = không giới hạn).
+                {data?.cache && ` Đang dùng ${(data.cache.bytes / 1024 ** 3).toFixed(2)} GB cho ${data.cache.files} ảnh.`} Thumbnail và video không tính vào giới hạn; thumbnail lấy sẵn từ Synology Photos nếu thư mục đã được lập chỉ mục.
               </small>
               <label>
                 Múi giờ
@@ -533,6 +563,7 @@ export default function SystemSettings({
                   username: "",
                   name: "",
                   role: "staff",
+                  album_scope: "all",
                   password: "",
                   disabled: false,
                 })
@@ -564,7 +595,7 @@ export default function SystemSettings({
                     <td>{u.name}</td>
                     <td>{u.username}</td>
                     <td>
-                      {u.role === "admin" ? "Quản trị viên" : "Nhân viên"}
+                      {u.role === "admin" ? "Quản trị viên" : u.album_scope === "assigned" ? "Nhân viên • album được giao" : "Nhân viên"}
                     </td>
                     <td>{u.disabled ? "Đã khóa" : "Hoạt động"}</td>
                     <td>
@@ -580,7 +611,7 @@ export default function SystemSettings({
                             disabled={busy}
                             onClick={() => {
                               setReset(u);
-                              setNewPassword("");
+                              setResetPassword("");
                             }}
                           >
                             Đặt lại mật khẩu
@@ -713,6 +744,7 @@ export default function SystemSettings({
                       name: edit.name,
                       role: edit.role,
                       disabled: edit.disabled,
+                      album_scope: edit.album_scope || "all",
                     }),
                   );
                 else
@@ -722,6 +754,7 @@ export default function SystemSettings({
                       username: edit.username,
                       name: edit.name,
                       role: edit.role,
+                      album_scope: edit.album_scope || "all",
                       password: edit.password,
                     }),
                   );
@@ -780,6 +813,15 @@ export default function SystemSettings({
                 <option value="admin">Quản trị viên — toàn quyền</option>
               </select>
             </label>
+            {edit.role === "staff" && (
+              <label>
+                Phạm vi album
+                <select value={edit.album_scope || "all"} onChange={(e) => setEdit({ ...edit, album_scope: e.target.value })}>
+                  <option value="all">Xem và quản lý mọi album</option>
+                  <option value="assigned">Chỉ album được giao (không duyệt NAS, không tạo album)</option>
+                </select>
+              </label>
+            )}
             {edit.id && (
               <label className="check-label">
                 <input
@@ -811,10 +853,10 @@ export default function SystemSettings({
               void action(async () => {
                 await api(
                   `/admin/users/${reset.id}/password`,
-                  json("POST", { password: newPassword }),
+                  json("POST", { password: resetPassword }),
                 );
                 setReset(null);
-                setNewPassword("");
+                setResetPassword("");
                 await load();
                 setNotice("Đã đặt lại mật khẩu. Nhân viên cần đăng nhập lại.");
               });
@@ -828,8 +870,8 @@ export default function SystemSettings({
                 required
                 minLength={8}
                 maxLength={256}
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
+                value={resetPassword}
+                onChange={(e) => setResetPassword(e.target.value)}
               />
             </label>
             <button className="primary wide" disabled={busy}>

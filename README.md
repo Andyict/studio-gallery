@@ -16,8 +16,36 @@
 - ZIP file gốc hoặc preview, tải cả thư mục hoặc list; truyền trực tiếp, không ZIP tạm.
 - Root read-only, chặn traversal/symlink, kiểm tra quyền với mọi media và ZIP ticket.
 - Bộ Compose giới hạn tài nguyên, user không root, healthcheck và log rotation.
+- Trang *Việc cần làm*, lưu trữ/xoá album, lịch sử khách tải ảnh, watermark logo trên ảnh xem trước, cài như ứng dụng trên điện thoại (PWA).
+- Gộp ảnh RAW + JPG cùng tên thành một ảnh (tải file gốc kèm RAW); giao diện khách tiếng Việt/English; thông báo cho studio qua email, Telegram hoặc webhook (Zalo/Make/n8n).
 
-## Chạy trên Synology DS923+
+## Cài gói SPK trên Synology (khuyến nghị)
+
+Gói chạy trực tiếp trên DSM 7 cho NAS x86_64 (ví dụ DS923+), không cần Docker.
+
+1. Package Center → cài **Node.js v22**. Nếu thư mục ảnh RAW chưa được Synology Photos lập chỉ mục, cài thêm **Perl** để ExifTool lấy ảnh JPEG nhúng trong RAW.
+2. Tải `StudioGallery-x86_64-<phiên bản>.spk` ở trang **Releases** của repo → Package Center → **Cài đặt thủ công**.
+3. Mở **Studio Gallery Console** trong menu DSM để cấp quyền share folder, rồi vào `http://IP-NAS:3215/manager`.
+4. **Cập nhật tự động** (làm một lần): Package Center → Cài đặt → Nguồn gói → Thêm, nhập `http://127.0.0.1:3215/api/pkg-source`. Khi có Release mới, Package Center hiện nút **Cập nhật**; dữ liệu trong `/var/packages/StudioGallery/var` được giữ nguyên. Trang Cài đặt → Chung trong Manager cho biết phiên bản đang chạy và bản mới nhất.
+
+Gói đã kèm FFmpeg tĩnh (video) và ExifTool (RAW). Bản 0.2.x cài từ nguồn `synology-repo.json` cũ cần cài thủ công bản 0.3.0 một lần, sau đó dùng nguồn gói mới ở bước 4.
+
+### Phát hành bản mới
+
+```sh
+npm version 0.3.1 --no-git-tag-version   # sửa "version" trong package.json
+git commit -am "Release 0.3.1" && git tag v0.3.1 && git push --follow-tags
+```
+
+GitHub Actions (`.github/workflows/release.yml`) chạy test, build `.spk` cho linux-x64 và tạo Release kèm `release.json`. Build trên máy dev (Windows/macOS/Linux đều được, dependency vẫn là bản linux-x64):
+
+```sh
+npm run spk -- --build 12
+```
+
+File `.spk` không được commit vào git; chỉ phát hành qua Releases.
+
+## Chạy bằng Docker trên Synology DS923+
 
 1. Chép thư mục dự án vào `/volume1/docker/nas-photo-proofing`.
 2. Tạo sẵn các thư mục `data` và `cache` bằng File Station. Chọn user NAS có quyền đọc thư mục ảnh và quyền ghi hai thư mục này. Kiểm tra UID/GID bằng `id ten_user` qua SSH; đặt `PUID`, `PGID` tương ứng. Không cấp quyền ghi ảnh gốc cho app.
@@ -33,6 +61,8 @@ docker compose logs --tail=100 api
 5. Mở `PUBLIC_ORIGIN/manager`. Nếu chưa có tài khoản, cửa sổ thiết lập sẽ yêu cầu tạo quản trị viên đầu tiên rồi tự đăng nhập. Nếu đã khai báo `ADMIN_PASSWORD`, đăng nhập bằng tên `admin` và mật khẩu đó.
 6. Tạo link, chọn phạm vi/thời hạn/quyền tải, sao chép URL được hiển thị một lần và gửi cho khách.
 
+Giới hạn số lần đăng nhập/truy cập tính theo từng địa chỉ khách. Nginx ghi đè `X-Forwarded-For` bằng địa chỉ thật; địa chỉ do proxy chuyển tiếp chỉ được chấp nhận từ mạng Docker (172.16.0.0/12), như Synology Reverse Proxy đi qua cổng publish. API tin `X-Forwarded-For` theo `TRUST_PROXY` (Compose đặt `uniquelocal` vì chỉ container proxy kết nối được tới API; mặc định khi chạy riêng là `loopback`). Không publish cổng API 3211 khi dùng `uniquelocal`. Khi khách vào qua Synology Reverse Proxy, đặt `HTTP_BIND=127.0.0.1` để cổng proxy chỉ nghe nội bộ; nếu cổng vẫn mở trực tiếp ra LAN/Internet, client có thể giả `X-Forwarded-For` qua docker-proxy và né giới hạn đăng nhập.
+
 Để dùng domain HTTPS: cấu hình Synology Reverse Proxy trỏ về cổng `HTTP_PORT`, đặt `PUBLIC_ORIGIN=https://gallery.example.com` rồi `docker compose up -d`. HTTPS bật cookie Secure. Origin phải khớp chính xác địa chỉ người dùng mở (gồm port nếu có). Không cần mở cổng API 3211 hoặc Next.js 3210 ra ngoài.
 
 Nginx bên trong đã tắt buffering/cache cho `/api/` và `proxy_max_temp_file_size 0`. Nếu đặt thêm proxy Synology phía ngoài, cũng cần tắt response buffering và cache cho endpoint download, đặt timeout đủ dài; nếu proxy ngoài vẫn buffer, không thể bảo đảm toàn tuyến không ghi ZIP tạm. Không ghi access log chứa URL chia sẻ bí mật.
@@ -45,9 +75,12 @@ Node.js 24 trở lên. Chạy từ thư mục gốc dự án:
 
 ```sh
 npm ci
-npm test
+npm test          # backend: API, quyền, quét, preview, SSE…
 npm run build
+npm run e2e       # Chromium chạy luồng khách + studio trên backend, Next.js và gateway thật
 ```
+
+`npm run e2e` cần trình duyệt Playwright (`npx playwright install chromium`).
 
 Biến môi trường local: `ADMIN_PASSWORD`, `PHOTO_ROOT`, `DATA_DIR`, `CACHE_DIR`, `PUBLIC_ORIGIN=http://localhost:3210`. Đường dẫn môi trường nên là absolute. Sau đó mở hai terminal:
 
@@ -64,9 +97,10 @@ API chạy 3211, web 3210. Next.js proxy `/api` về API trong local development
 
 - Hỗ trợ scan JPG/JPEG/PNG/WebP/TIFF/HEIC/AVIF và CR2/CR3/NEF/ARW/DNG/RAF/ORF/RW2.
 - JPG và các định dạng mà build Sharp hỗ trợ được tạo WebP bằng libvips; metadata nguồn/GPS không chép sang preview.
-- Với RAW, worker dùng ExifTool lấy `JpgFromRaw`, sau đó thử `PreviewImage`. Đây là preview do máy ảnh nhúng, không phải full RAW develop. RAW không có JPEG nhúng hợp lệ sẽ báo lỗi; cung cấp JPG cùng thư mục để duyệt. HEIC/TIFF đặc biệt cũng phụ thuộc codec, không cam kết tất cả camera.
+- Thumbnail lấy sẵn từ Synology Photos (`@eaDir/<file>/SYNOPHOTO_THUMB_XL.jpg`) nếu thư mục đã được lập chỉ mục và thumbnail mới hơn file gốc: nhanh hơn nhiều, và có cả RAW/HEIC mà bộ giải mã đi kèm không đọc được. Nếu không có, thumbnail tạo trực tiếp từ file gốc.
+- Với RAW không có thumbnail Synology, worker dùng ExifTool lấy `JpgFromRaw`, sau đó thử `PreviewImage`. Đây là preview do máy ảnh nhúng, không phải full RAW develop. RAW không có JPEG nhúng hợp lệ sẽ báo lỗi; cung cấp JPG cùng thư mục để duyệt. HEIC/TIFF đặc biệt cũng phụ thuộc codec, không cam kết tất cả camera.
 - RAW gốc vẫn tải được khi link có quyền, kể cả không tạo được preview. RAW và JPG cùng stem là hai ảnh riêng; export stem loại trùng.
-- Một worker xử lý preview tuần tự, libvips concurrency=1/cache 64 MB. Preview tối đa 2048 px, thumb tối đa 480×720, không upscale.
+- Worker nền chỉ tạo thumbnail (tối đa 480×720) và chuyển mã video. Ảnh xem trước 2048 px được tạo khi có người mở ảnh (tối đa 2 ảnh cùng lúc), lưu trong cache có giới hạn dung lượng (Cài đặt → Quét & chia sẻ, mặc định 20 GB): vượt giới hạn thì ảnh lâu không xem bị xoá trước. ZIP bản xem tạo preview còn thiếu ngay trong lúc tải.
 - App không ghi rating/XMP lên nguồn và không xóa file nguồn. Đổi tên/di chuyển được coi là mất ảnh cũ + ảnh mới. Size/mtime phát hiện thay đổi, chưa có checksum định kỳ.
 - Copy ảnh lớn xong rồi mới sync, hoặc copy vào thư mục tạm ngoài project rồi rename. Tránh thay đổi file trong khi khách tải ZIP.
 
@@ -90,11 +124,11 @@ docker compose exec api node backup.mjs
 
 Backup nhất quán tạo tại `DATA_PATH/backups/`. Không chỉ copy `gallery.sqlite` khi app đang chạy WAL. Đặt lịch lệnh trên bằng Synology Task Scheduler nếu cần, và giữ bản sao trên thiết bị khác. Để phục hồi: dừng Compose, giữ nguyên bản data cũ trong thư mục riêng, đặt database backup thành `data/gallery.sqlite` trong thư mục data sạch (không mang WAL/SHM cũ), khôi phục quyền user, rồi khởi động. Cache có thể tái tạo, còn database chứa lựa chọn và ghi chú cần backup.
 
-Cache chưa có quota/LRU tự động. File cache cũ có thể tích lũy khi thay ảnh: theo dõi dung lượng. Không xóa cache đang sử dụng. Với cache bị mất, dùng scan/retry theo hướng dẫn kiểm tra trạng thái; có thể rebuild bằng lệnh maintenance ở bản sau.
+Cache ảnh xem trước có giới hạn dung lượng và tự xoá ảnh lâu không xem; file của ảnh đã thay hoặc đã xoá được dọn khi khởi động và mỗi 6 giờ. Thumbnail và video không tính vào giới hạn. Mất cache không mất dữ liệu: preview tạo lại khi mở ảnh, thumbnail tạo lại bằng *Thử lại ảnh lỗi* hoặc quét lại.
 
 ## Phạm vi hiện tại
 
-Đây là bản đầu chạy được để kiểm thử workflow studio. Chưa có full RAW developer, email, phục hồi phiên xuyên thiết bị, watermark, quota cache, xử lý video hay gộp RAW+JPG. Không có dịch vụ SaaS, AI nhận diện mặt hoặc analytics ngoài ứng dụng.
+Đây là bản đầu chạy được để kiểm thử workflow studio. Chưa có full RAW developer hay gửi tin Zalo OA trực tiếp (dùng webhook để nối). Không có dịch vụ SaaS, AI nhận diện mặt hoặc analytics ngoài ứng dụng.
 
 Xem [tài liệu tham khảo](docs/RESEARCH.md), [API](docs/API.md) và [kết quả kiểm thử](docs/VALIDATION.md). Cần chạy smoke test Compose trên NAS thật và thử bộ RAW của máy ảnh studio trước khi đưa link cho khách.
 

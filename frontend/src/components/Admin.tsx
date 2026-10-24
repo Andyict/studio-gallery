@@ -1,6 +1,17 @@
 "use client";
 import ImagePreview from "./ImagePreview";
 import AlbumInbox from "./AlbumInbox";
+import NotificationBell from "./NotificationBell";
+import ScanSchedule, { describeCron, intervalToCron } from "./ScanSchedule";
+import WorkflowCard, { statusLabel } from "./WorkflowCard";
+import Worklist from "./Worklist";
+import Customers from "./Customers";
+import AlbumStaff from "./AlbumStaff";
+import Dashboard from "./Dashboard";
+import { AlbumLifecycle, DownloadLog } from "./AlbumLifecycle";
+import ShareDialog from "./ShareDialog";
+import { AlbumCard, Stat, displayProjectPath } from "./AdminParts";
+import { useLiveEvents } from "@/lib/live";
 import { useCallback, useEffect, useState } from "react";
 import {
   Aperture,
@@ -33,6 +44,8 @@ import {
   Settings,
   ShieldCheck,
   X,
+  UserRound,
+  ListChecks,
 } from "lucide-react";
 import { api, json, copy } from "@/lib/api";
 import PasswordField from "./PasswordField";
@@ -41,13 +54,6 @@ import SystemSettings from "./SystemSettings";
 import BrandMark from "./BrandMark";
 import {isVideo} from "@/lib/media";
 
-function displayProjectPath(root: string) {
-  const prefix = "__nas_shares__/";
-  if (!root.startsWith(prefix)) return root;
-  const parts = root.slice(prefix.length).split("/");
-  try { parts[0] = decodeURIComponent(parts[0]); } catch { /* Keep the NAS name as-is. */ }
-  return parts.join("/");
-}
 
 export default function Admin() {
   const [me, setMe] = useState<any>(null),
@@ -56,6 +62,10 @@ export default function Admin() {
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  const [chatProject, setChatProject] = useState("");
+  const [customersOpen, setCustomersOpen] = useState(false);
+  const [live, setLive] = useState(0);
+  const [finalFolder, setFinalFolder] = useState("Final");
   const [returnToInbox, setReturnToInbox] = useState(false);
   const [settingsTab, setSettingsTab] = useState("general");
   const [brand, setBrand] = useState("Studio Gallery"),
@@ -77,33 +87,20 @@ export default function Admin() {
     [links, setLinks] = useState<any[]>([]),
     [lists, setLists] = useState<any[]>([]),
     [comments, setComments] = useState<any[]>([]);
-  const [createOpen, setCreateOpen] = useState(false),
-    [newName, setNewName] = useState(""),
-    [directory, setDirectory] = useState(""),
-    [directories, setDirectories] = useState<any[]>([]),
-    [source, setSource] = useState("");
-  const [shareOpen, setShareOpen] = useState(false),
-    [label, setLabel] = useState("Khách hàng"),
-    [pin, setPin] = useState(""),
-    [customerPhone, setCustomerPhone] = useState(""),
-    [expires, setExpires] = useState(""),
-    [scope, setScope] = useState<string[]>([]),
-    [downloads, setDownloads] = useState(true),
-    [originals, setOriginals] = useState(false),
-    [shareURL, setShareURL] = useState("");
+  const [shareOpen, setShareOpen] = useState(false);
   const [exportText, setExportText] = useState(""),
     [editName, setEditName] = useState(""),
     [editEditor, setEditEditor] = useState(""),
     [editNote, setEditNote] = useState(""),
     [cron, setCron] = useState(""),
-    [scanInterval, setScanInterval] = useState<number|null>(null),
     [timezone, setTimezone] = useState("Asia/Ho_Chi_Minh");
   const [selectionPhotos, setSelectionPhotos] = useState<any[] | null>(null),
     [selectionTitle, setSelectionTitle] = useState("");
   const [albumSearch, setAlbumSearch] = useState("");
-  const [dashboardTab, setDashboardTab] = useState<"folders" | "shared">(
-    "folders",
+  const [dashboardTab, setDashboardTab] = useState<"home" | "folders" | "shared">(
+    "home",
   );
+  const [showArchived, setShowArchived] = useState(false);
   const [browseOnly, setBrowseOnly] = useState(false);
   const [browserPath, setBrowserPath] = useState("");
   const [browserData, setBrowserData] = useState<any>(null);
@@ -125,7 +122,8 @@ export default function Admin() {
     [albumPhotos, setAlbumPhotos] = useState<any[]>([]),
     [photoFolder, setPhotoFolder] = useState<any>(null);
   const project = projects.find((p) => p.id === selected);
-  const visibleProjects = projects.filter((p) =>
+  const activeProjects = projects.filter((p) => !p.archived_at);
+  const visibleProjects = projects.filter((p) => (showArchived ? !!p.archived_at : !p.archived_at) &&
     `${p.name} ${displayProjectPath(String(p.root))}`
       .toLocaleLowerCase("vi")
       .includes(albumSearch.trim().toLocaleLowerCase("vi")),
@@ -198,11 +196,45 @@ export default function Admin() {
   }, []);
   useEffect(() => {
     if (!auth) return;
+    api("/admin/defaults").then((d) => setFinalFolder(d.finalFolder || "Final")).catch(() => {});
     void refresh().catch((e) => setError(e.message));
     let loading = false;
     const t = setInterval(async () => { if (loading || document.hidden) return; loading=true; try { await refresh(); } catch {} finally { loading=false; } }, 15000);
     return () => clearInterval(t);
   }, [auth, refresh]);
+  // Realtime: every studio-side event bumps `live`; bursts (message + notification + read)
+  // collapse into one refresh of counts and the open album.
+  useLiveEvents(auth ? "/admin/events" : null, () => setLive((v) => v + 1));
+  useEffect(() => {
+    if (!live) return;
+    const t = setTimeout(() => {
+      refresh().catch(() => {});
+      if (selected) detail().catch(() => {});
+    }, 300);
+    return () => clearTimeout(t);
+  }, [live]);
+  // Staff limited to assigned albums cannot browse the NAS; they start on their album list.
+  const limited = !!me && me.role !== "admin" && me.album_scope === "assigned";
+  useEffect(() => { if (limited) setDashboardTab((t) => (t === "folders" ? "home" : t)); }, [limited]);
+  function openAlbum(id: string, albumTab = "overview") {
+    setChatOpen(false); setCustomersOpen(false);
+    setSystemOpen(false);
+    setBrowseOnly(false);
+    setSelected(id);
+    setTab(albumTab);
+  }
+  // Every "create link" entry point starts from the studio defaults, never from the previous album's form.
+  // Every "create link" entry point opens the dialog, which starts from the studio defaults.
+  async function openShare() {
+    setShareOpen(true);
+  }
+  function openInbox(projectId = "") {
+    setChatProject(projectId);
+    setCustomersOpen(false);
+    setChatOpen(true);
+    setSystemOpen(false);
+    setSelected("");
+  }
   useEffect(() => {
     if (!auth || systemOpen || chatOpen || selected || dashboardTab !== "folders") return;
     let active = true;
@@ -223,7 +255,8 @@ export default function Admin() {
   useEffect(() => {
     if (!auth || !selected) return;
     void detail().catch((e) => setError(e.message));
-    const t = setInterval(() => detail().catch(() => {}), 10000);
+    // Realtime events refresh the album immediately; this slow poll only covers a dropped stream.
+    const t = setInterval(() => { if (!document.hidden) detail().catch(() => {}); }, 30000);
     return () => clearInterval(t);
   }, [auth, selected, detail]);
   useEffect(() => {
@@ -231,8 +264,8 @@ export default function Admin() {
       setEditName(project.name);
       setEditEditor(project.editor || "");
       setEditNote(project.internal_note || "");
-      setCron(project.cron);
-      setScanInterval(project.scan_interval_seconds || null);
+      // Older albums may carry a seconds-based interval; edit it as the equivalent cron.
+      setCron(intervalToCron(project.scan_interval_seconds) ?? project.cron);
       setTimezone(project.timezone);
     }
   }, [project?.id]);
@@ -260,13 +293,10 @@ export default function Admin() {
       setBusy(false);
     }
   }
-  async function browse(value: string) {
-    const data = await api(
-      `/admin/directories?path=${encodeURIComponent(value)}`,
-    );
-    setDirectory(data.path);
-    setDirectories(data.folders);
-    setSource(data.path);
+  // Single click/tap or Enter opens a photo; double-click alone was unreachable on touch and keyboard.
+  function openPhotoDetail(photo: any) {
+    setSelectionTitle(photo.filename);
+    setSelectionPhotos([photo]);
   }
   function notesFor(photoId: string) {
     return comments.filter((c) => c.photo_id === photoId);
@@ -451,9 +481,16 @@ export default function Admin() {
         </a>
         <span className="tiny-label">WORKSPACE</span>
         <button
-          className={`nav-item ${!chatOpen && !systemOpen && !selected && dashboardTab === "folders" ? "active" : ""}`}
+          className={`nav-item ${!chatOpen && !customersOpen && !systemOpen && !selected && dashboardTab === "home" ? "active" : ""}`}
+          onClick={() => { setChatOpen(false); setCustomersOpen(false); setSystemOpen(false); setSelected(""); setDashboardTab("home"); }}
+        >
+          <ListChecks size={18} />
+          Việc cần làm
+        </button>
+        {!limited && <button
+          className={`nav-item ${!chatOpen && !customersOpen && !systemOpen && !selected && dashboardTab === "folders" ? "active" : ""}`}
           onClick={() => {
-            setChatOpen(false);
+            setChatOpen(false); setCustomersOpen(false);
             setSystemOpen(false);
             setDashboardTab("folders");
             setBrowseOnly(true);
@@ -463,16 +500,20 @@ export default function Admin() {
         >
           <FolderOpen size={18} />
           Duyệt thư mục
-        </button>
-        <button className={`nav-item ${chatOpen ? "active" : ""}`} onClick={() => { setChatOpen(true); setSystemOpen(false); setSelected(""); }}>
+        </button>}
+        <button className={`nav-item ${chatOpen ? "active" : ""}`} onClick={() => openInbox()}>
           <MessageCircle size={18} />
           Tin nhắn album
           <span className="nav-count">{projects.reduce((n,p)=>n+(p.unread_message_count||0),0)}</span>
         </button>
+        <button className={`nav-item ${customersOpen ? "active" : ""}`} onClick={() => { setChatOpen(false); setSystemOpen(false); setSelected(""); setCustomersOpen(true); }}>
+          <UserRound size={18} />
+          Khách hàng
+        </button>
         <button
-          className={`nav-item ${!chatOpen && !systemOpen && !selected && dashboardTab === "shared" ? "active" : ""}`}
+          className={`nav-item ${!chatOpen && !customersOpen && !systemOpen && !selected && dashboardTab === "shared" ? "active" : ""}`}
           onClick={() => {
-            setChatOpen(false);
+            setChatOpen(false); setCustomersOpen(false);
             setSystemOpen(false);
             setDashboardTab("shared");
             setBrowseOnly(false);
@@ -484,13 +525,13 @@ export default function Admin() {
           <LinkIcon size={18} />
           Quản lý album
           <span className="nav-count">
-            {projects.length}
+            {activeProjects.length}
           </span>
         </button>
         <button
           className={`nav-item ${systemOpen ? "active" : ""}`}
           onClick={() => {
-            setChatOpen(false);
+            setChatOpen(false); setCustomersOpen(false);
             setSettingsTab("general");
             setSystemOpen(true);
           }}
@@ -544,17 +585,18 @@ export default function Admin() {
             Studio <ChevronRight size={14} />{" "}
             {systemOpen
               ? "Cài đặt"
-              : chatOpen ? "Tin nhắn album" : project?.name ||
-                (dashboardTab === "folders" ? "Duyệt thư mục" : "Quản lý album")}
+              : customersOpen ? "Khách hàng" : chatOpen ? "Tin nhắn album" : project?.name ||
+                (dashboardTab === "home" ? "Việc cần làm" : dashboardTab === "folders" ? "Duyệt thư mục" : "Quản lý album")}
           </span>
           <div className="row">
+            <NotificationBell revision={live} onOpenAlbum={openAlbum} />
             <span className="muted small">{me?.name || "Studio"}</span>
             <div className="avatar" aria-hidden="true">{(me?.name || "Studio").slice(0, 1).toUpperCase()}</div>
           </div>
         </header>
         <button
           className="mobile-settings button"
-          onClick={() => { setChatOpen(false); setSystemOpen(!systemOpen); }}
+          onClick={() => { setChatOpen(false); setCustomersOpen(false); setSystemOpen(!systemOpen); }}
         >
           <Settings size={16} />
           {systemOpen ? "Quay lại bộ ảnh" : "Cài đặt & tài khoản"}
@@ -570,7 +612,7 @@ export default function Admin() {
                   title="Trang chủ"
                   aria-label="Trang chủ"
                   onClick={() => {
-                    setChatOpen(false);
+                    setChatOpen(false); setCustomersOpen(false);
             setSystemOpen(false);
                     setSelected("");
                     setDashboardTab("shared");
@@ -609,8 +651,15 @@ export default function Admin() {
               }}
             />
           </>
+        ) : customersOpen ? (
+          <Customers onOpenAlbum={openAlbum} />
         ) : chatOpen ? (
-          <AlbumInbox onRead={refresh} onOpenAlbum={id => {setChatOpen(false);setReturnToInbox(true);setBrowseOnly(false);setSelected(id);setTab("overview");}} />
+          <AlbumInbox key={chatProject} revision={live} initialProject={chatProject} onRead={refresh} onOpenAlbum={id => {setReturnToInbox(true);openAlbum(id);}} />
+        ) : !selected && dashboardTab === "home" ? (
+          <>
+            <section className="admin-heading"><div><span className="eyebrow">STUDIO</span><h1>Việc cần làm</h1><p className="muted">Album chờ chỉnh sửa, hạn trả ảnh, tin nhắn và ghi chú của khách.</p></div></section>
+            <Dashboard revision={live} onOpenAlbum={openAlbum} onOpenInbox={(id) => openInbox(id || "")} onOpenCustomers={() => { setSelected(""); setCustomersOpen(true); }} />
+          </>
         ) : (
           <>
             <section
@@ -771,7 +820,12 @@ export default function Admin() {
                       <p className="album-results">
                         {dashboardTab === "folders" && !albumSearch.trim()
                           ? [folderEntries.length ? `${folderEntries.length} thư mục` : "", fileEntries.length ? `${fileEntries.length} tệp` : ""].filter(Boolean).join(" · ")
-                          : `${dashboardAlbums.length} / ${projects.length} album`}
+                          : `${dashboardAlbums.length} / ${showArchived ? projects.length - activeProjects.length : activeProjects.length} album${showArchived ? " đã lưu trữ" : ""}`}
+                        {dashboardTab === "shared" && projects.length > activeProjects.length && (
+                          <button type="button" className="text-button archived-toggle" onClick={() => setShowArchived(!showArchived)}>
+                            {showArchived ? "← Album đang dùng" : `Album đã lưu trữ (${projects.length - activeProjects.length})`}
+                          </button>
+                        )}
                       </p>
                     </div>
                     <div className="album-dashboard-tools">
@@ -795,7 +849,7 @@ export default function Admin() {
                   {dashboardTab === "folders" && browserPath && browserData && (
                     <div className="album-browser-open" style={{display:"flex",gap:8,flexWrap:"wrap"}}>
                       {browserData.album ? <>
-                        <button className="primary" onClick={() => {setBrowseOnly(false);setSelected(browserData.album.id);setTab("overview");setShareOpen(true);}}><LinkIcon size={15}/> Tạo link chia sẻ</button>
+                        <button className="primary" onClick={() => {setBrowseOnly(false);setSelected(browserData.album.id);setTab("overview");void action(openShare);}}><LinkIcon size={15}/> Tạo link chia sẻ</button>
                         <button onClick={() => {setBrowseOnly(false);setSelected(browserData.album.id);setTab("settings");}}>Cài đặt album</button>
                       </> : <button className="primary" disabled={busy} onClick={() => void action(async()=>{
                         const name=browserData.breadcrumbs.at(-1)?.name || "Album mới";
@@ -946,6 +1000,8 @@ export default function Admin() {
                     ["overview", "Tổng quan"],
                     ["photos", "Ảnh trong album"],
                     ["selections", "Ảnh khách yêu thích"],
+                    ["worklist", "Danh sách edit"],
+                    ["links", "Link chia sẻ"],
                     ["settings", "Cài đặt album"],
                   ].map(([id, name]) => (
                     <button
@@ -963,7 +1019,7 @@ export default function Admin() {
                       {name}
                     </button>
                   ))}
-                  <button className="primary share-tab-action" onClick={() => setShareOpen(true)}>
+                  <button className="primary share-tab-action" onClick={() => void action(openShare)}>
                     <LinkIcon size={15} /> Tạo link chia sẻ
                   </button>
                 </nav>}
@@ -1035,7 +1091,7 @@ export default function Admin() {
                         </div>
                         <div className="sync-meta">
                           <span>Lịch quét</span>
-                          <strong>{project.cron || "Thủ công"}</strong>
+                          <strong>{describeCron(intervalToCron(project.scan_interval_seconds) ?? project.cron)}</strong>
                         </div>
                         {project.scan?.error && (
                           <p className="alert">{project.scan.error}</p>
@@ -1080,23 +1136,17 @@ export default function Admin() {
                           </p>
                         )}
                       </section>
+                      <WorkflowCard project={project} finalFolder={finalFolder} onSaved={async (message) => { await refresh(); setNotice(message); }} />
+                      <DownloadLog projectId={project.id} revision={live} />
                       <section className="album-work-card">
                         <div className="row">
                           <span className="icon-tile"><CheckCheck size={19} /></span>
                           <div>
                             <span className="tiny-label">PHÂN CÔNG XỬ LÝ</span>
-                            <h3>Editor & ghi chú</h3>
+                            <h3>Phân công & ghi chú</h3>
                           </div>
                         </div>
-                        <label>
-                          Editor phụ trách
-                          <input
-                            value={editEditor}
-                            maxLength={120}
-                            onChange={(e) => setEditEditor(e.target.value)}
-                            placeholder="Ví dụ: Minh, Huyền..."
-                          />
-                        </label>
+                        <AlbumStaff key={project.id} projectId={project.id} canEdit={!limited} onSaved={async (message) => { await refresh(); setNotice(message); }} />
                         <label>
                           Ghi chú nội bộ
                           <textarea
@@ -1123,11 +1173,11 @@ export default function Admin() {
                                 }),
                               );
                               await refresh();
-                              setNotice("Đã lưu editor và ghi chú nội bộ");
+                              setNotice("Đã lưu ghi chú nội bộ");
                             })
                           }
                         >
-                          <Check size={16} /> Lưu thông tin
+                          <Check size={16} /> Lưu ghi chú
                         </button>
                       </section>
                       <section className="share-card">
@@ -1138,28 +1188,7 @@ export default function Admin() {
                         </p>
                         <button
                           className="text-button"
-                          onClick={() =>
-                            void action(async () => {
-                              const d = await api("/admin/defaults");
-                              setDownloads(d.downloads);
-                              setOriginals(d.originals);
-                              setScope([]);
-                              const t = new Date(
-                                Date.now() + d.expiryDays * 86400000,
-                              );
-                              setExpires(
-                                d.expiryDays
-                                  ? new Date(
-                                      t.getTime() -
-                                        t.getTimezoneOffset() * 60000,
-                                    )
-                                      .toISOString()
-                                      .slice(0, 16)
-                                  : "",
-                              );
-                              setShareOpen(true);
-                            })
-                          }
+                          onClick={() => void action(openShare)}
                         >
                           Tạo link chia sẻ <ArrowUpRight size={17} />
                         </button>
@@ -1167,33 +1196,16 @@ export default function Admin() {
                     </div>}
                   </div>
                 )}
+                {tab === "worklist" && selected && (
+                  <Worklist projectId={selected} revision={live} onReply={() => openInbox(selected)} onOpen={(photo) => openPhotoDetail({ ...photo, comment_count: photo.note_count })} />
+                )}
                 {tab === "links" && (
                   <section className="panel">
                     <div className="panel-title">
                       <h2>Link chia sẻ</h2>
                       <button
                         className="primary"
-                        onClick={() =>
-                          void action(async () => {
-                            const d = await api("/admin/defaults");
-                            setDownloads(d.downloads);
-                            setOriginals(d.originals);
-                            setScope([]);
-                            const t = new Date(
-                              Date.now() + d.expiryDays * 86400000,
-                            );
-                            setExpires(
-                              d.expiryDays
-                                ? new Date(
-                                    t.getTime() - t.getTimezoneOffset() * 60000,
-                                  )
-                                    .toISOString()
-                                    .slice(0, 16)
-                                : "",
-                            );
-                            setShareOpen(true);
-                          })
-                        }
+                        onClick={() => void action(openShare)}
                       >
                         <Plus size={16} />
                         Tạo link
@@ -1224,6 +1236,11 @@ export default function Admin() {
                               <tr key={l.id}>
                                 <td>
                                   <strong>{l.label}</strong>
+                                  {l.phone_last4 && (
+                                    <span className="muted small">
+                                      {" "}• SĐT …{l.phone_last4}
+                                    </span>
+                                  )}
                                 </td>
                                 <td>
                                   {l.scope === "all"
@@ -1335,10 +1352,11 @@ export default function Admin() {
                           <div
                             className="favorite-file"
                             key={photo.id}
-                            onDoubleClick={() => {
-                              setSelectionTitle(photo.filename);
-                              setSelectionPhotos([photo]);
-                            }}
+                            role="button"
+                            tabIndex={0}
+                            aria-label={`Xem ${photo.filename}`}
+                            onClick={() => openPhotoDetail(photo)}
+                            onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openPhotoDetail(photo); } }}
                           >
                             {photo.status === "ready" ? (
                               <img
@@ -1475,10 +1493,11 @@ export default function Admin() {
                             <div
                               className="favorite-file"
                               key={photo.id}
-                              onDoubleClick={() => {
-                                setSelectionTitle(photo.filename);
-                                setSelectionPhotos([photo]);
-                              }}
+                              role="button"
+                              tabIndex={0}
+                              aria-label={`Xem ${photo.filename}`}
+                              onClick={() => openPhotoDetail(photo)}
+                              onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openPhotoDetail(photo); } }}
                             >
                               {photo.status === "ready" ? (
                                 <img
@@ -1518,12 +1537,11 @@ export default function Admin() {
                                       <span>{note.body}</span>
                                       <button
                                         type="button"
-                                        onDoubleClick={(e) => e.stopPropagation()}
-                                        onClick={(e) => {
+                                                                                onClick={(e) => {
                                           e.stopPropagation();
                                           void action(async () => {
                                             await api(
-                                              `/admin/comments/${note.id}`,
+                                              `/admin/messages/${note.id}`,
                                               json("PATCH", {
                                                 resolved: !note.resolved,
                                               }),
@@ -1534,6 +1552,15 @@ export default function Admin() {
                                         }}
                                       >
                                         {note.resolved ? "Mở lại" : "Xong"}
+                                      </button>
+                                      <button
+                                        type="button"
+                                                                                onClick={(e) => {
+                                          e.stopPropagation();
+                                          openInbox(selected);
+                                        }}
+                                      >
+                                        Trả lời
                                       </button>
                                     </div>
                                   ))
@@ -1558,6 +1585,7 @@ export default function Admin() {
                   </section>
                 )}{" "}
                 {tab === "settings" && (
+                  <>
                   <section className="panel settings-panel">
                     <h2>Cài đặt bộ ảnh</h2>
                     <form
@@ -1566,7 +1594,7 @@ export default function Admin() {
                         void action(async () => {
                           await api(
                             `/admin/projects/${selected}`,
-                            json("PATCH", { name: editName, cron, timezone, scan_interval_seconds:scanInterval, editor:editEditor, internal_note:editNote }),
+                            json("PATCH", { name: editName, cron, timezone, scan_interval_seconds:null, editor:editEditor, internal_note:editNote }),
                           );
                           await refresh();
                           setNotice("Đã lưu cài đặt");
@@ -1581,30 +1609,9 @@ export default function Admin() {
                           onChange={(e) => setEditName(e.target.value)}
                         />
                       </label>
-                      <label>
-                        Chu kỳ quét dữ liệu
-                        <select value={scanInterval ?? 0} onChange={(e)=>setScanInterval(Number(e.target.value)||null)}>
-                          <option value={0}>Theo lịch bên dưới</option>
-                          <option value={10}>10 giây</option><option value={30}>30 giây</option>
-                          <option value={60}>1 phút</option><option value={300}>5 phút</option>
-                          <option value={600}>10 phút</option><option value={1800}>30 phút</option>
-                          <option value={3600}>1 giờ</option>
-                        </select>
-                      </label>
                       <label>Nhân viên phụ trách<input value={editEditor} onChange={e=>setEditEditor(e.target.value)} placeholder="Tên nhân viên" /></label>
                       <label>Ghi chú nội bộ<textarea value={editNote} onChange={e=>setEditNote(e.target.value)} placeholder="Chỉ nhân viên studio nhìn thấy" maxLength={2000}/></label>
-                      <label>
-                        Lịch quét cron
-                        <input
-                          value={cron}
-                          onChange={(e) => setCron(e.target.value)}
-                          placeholder="0 3 * * *"
-                        />
-                        <small className="muted">
-                          Ví dụ: 0 3 * * * = 03:00 mỗi ngày. Để trống nếu chỉ
-                          quét thủ công.
-                        </small>
-                      </label>
+                      <ScanSchedule value={cron} onChange={setCron} />
                       <label>
                         Múi giờ
                         <input
@@ -1618,6 +1625,10 @@ export default function Admin() {
                       </button>
                     </form>
                   </section>
+                  <AlbumLifecycle project={project} isAdmin={me?.role === "admin"} canManage={!limited}
+                    onChanged={async (message) => { await refresh(); setNotice(message); }}
+                    onDeleted={async () => { setSelected(""); setDashboardTab("shared"); await refresh(); setNotice("Đã xoá album"); }} />
+                  </>
                 )}
               </>
             )}
@@ -1640,227 +1651,9 @@ export default function Admin() {
           {browserPreview.thumbnail ? <ImagePreview key={browserPreview.path} src={`/api/admin/browse/thumb?size=preview&path=${encodeURIComponent(browserPreview.path)}`} name={browserPreview.name} /> : <p className="muted">Định dạng này chưa có ảnh xem trước trong trình duyệt. Tệp vẫn nằm trong thư mục nguồn trên NAS.</p>}
         </Modal>
       )}
-      {createOpen && (
-        <Modal title="Thêm bộ ảnh từ NAS" close={() => setCreateOpen(false)}>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              void action(async () => {
-                const d = await api(
-                  "/admin/projects",
-                  json("POST", { name: newName, root: source }),
-                );
-                await refresh();
-                setSelected(d.id);
-                setCreateOpen(false);
-                setNewName("");
-                setTab("overview");
-                setChatOpen(false);
-            setSystemOpen(false);
-              });
-            }}
-          >
-            <label>
-              Tên bộ ảnh
-              <input
-                autoFocus
-                required
-                value={newName}
-                maxLength={160}
-                onChange={(e) => setNewName(e.target.value)}
-                placeholder="Tuấn & An · Ngày chung đôi"
-              />
-            </label>
-            <label>Thư mục nguồn</label>
-            <div className="directory-browser">
-              <div className="directory-path">
-                <button
-                  type="button"
-                  className="icon-button"
-                  aria-label="Thư mục cha"
-                  disabled={!directory}
-                  onClick={() =>
-                    void action(() =>
-                      browse(directory.split("/").slice(0, -1).join("/")),
-                    )
-                  }
-                >
-                  <ArrowLeft size={16} />
-                </button>
-                <code>/{directory}</code>
-              </div>
-              {directories.map((d) => (
-                <button
-                  type="button"
-                  className="directory-item"
-                  key={d.path}
-                  onClick={() => void action(() => browse(d.path))}
-                >
-                  <Folder size={17} />
-                  {d.name}
-                  <ChevronRight size={15} />
-                </button>
-              ))}
-              {!directories.length && (
-                <p className="muted small">Không có thư mục con.</p>
-              )}
-            </div>
-            <p className="muted small">Sẽ dùng thư mục đang mở: /{source}</p>
-            <button className="primary wide" disabled={busy}>
-              Tạo bộ ảnh & đồng bộ
-            </button>
-          </form>
-          {error && <p className="alert">{error}</p>}
-        </Modal>
-      )}
-      {shareOpen && (
-        <Modal
-          title="Cấp quyền truy cập album"
-          close={() => setShareOpen(false)}
-        >
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              void action(async () => {
-                const d = await api(
-                  `/admin/projects/${selected}/links`,
-                  json("POST", {
-                    label,
-                    password: pin,
-                    phone: customerPhone,
-                    folder_ids: scope,
-                    downloads,
-                    originals,
-                    expires_at: expires
-                      ? new Date(expires).toISOString()
-                      : null,
-                  }),
-                );
-                setShareURL(d.url);
-                setShareOpen(false);
-                setPin("");
-                await detail();
-              });
-            }}
-          >
-            <label>
-              Tên khách hàng / nhóm khách
-              <input
-                required
-                value={label}
-                maxLength={160}
-                onChange={(e) => setLabel(e.target.value)}
-              />
-            </label>
-            <label>
-              Số điện thoại khách
-              <input
-                required
-                inputMode="tel"
-                value={customerPhone}
-                onChange={(e) => setCustomerPhone(e.target.value)}
-                placeholder="090 123 4567"
-              />
-            </label>
-            <p className="muted small">
-              Khách chỉ cần nhập số điện thoại này tại trang chủ studio.
-            </p>
-            <div className="form-grid">
-              <label>
-                PIN cho link trực tiếp
-                <PasswordField
-                  type="password"
-                  value={pin}
-                  onChange={(e) => setPin(e.target.value)}
-                  placeholder="Không bắt buộc"
-                />
-              </label>
-              <label>
-                Hết hạn lúc
-                <input
-                  type="datetime-local"
-                  value={expires}
-                  onChange={(e) => setExpires(e.target.value)}
-                />
-              </label>
-            </div>
-            <label>
-              Thư mục được xem{" "}
-              <small className="muted">Không chọn = toàn bộ bộ ảnh</small>
-            </label>
-            <div className="scope-list">
-              {folders.map((f) => (
-                <label className="check-label" key={f.id}>
-                  <input
-                    type="checkbox"
-                    checked={scope.includes(f.id)}
-                    onChange={(e) =>
-                      setScope((v) =>
-                        e.target.checked
-                          ? [...v, f.id]
-                          : v.filter((x) => x !== f.id),
-                      )
-                    }
-                  />
-                  {f.relative_path || "Toàn bộ cây thư mục"}
-                </label>
-              ))}
-            </div>
-            <label className="check-label">
-              <input
-                type="checkbox"
-                checked={downloads}
-                onChange={(e) => setDownloads(e.target.checked)}
-              />
-              Cho tải preview
-            </label>
-            <label className="check-label">
-              <input
-                type="checkbox"
-                checked={originals}
-                disabled={!downloads}
-                onChange={(e) => setOriginals(e.target.checked)}
-              />
-              Cho tải file gốc JPG / RAW
-            </label>
-            <button className="primary wide" disabled={busy}>
-              Tạo quyền truy cập <LinkIcon size={16} />
-            </button>
-          </form>
-          {error && <p className="alert">{error}</p>}
-        </Modal>
-      )}
-      {!!shareURL && (
-        <Modal title="Link đã sẵn sàng" close={() => setShareURL("")}>
-          <p className="muted">
-            Lưu link này trước khi đóng. Bạn có thể thu hồi quyền bất cứ lúc
-            nào.
-          </p>
-          <textarea readOnly value={shareURL} rows={3} />
-          <div className="row">
-            <button
-              className="primary"
-              onClick={() =>
-                void action(async () => {
-                  await copy(shareURL);
-                  setNotice("Đã sao chép link");
-                })
-              }
-            >
-              <Copy size={16} />
-              Sao chép
-            </button>
-            <a
-              className="button"
-              href={shareURL}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Mở gallery <ArrowUpRight size={16} />
-            </a>
-          </div>
-          {error && <p className="alert">{error}</p>}
-        </Modal>
+      {shareOpen && project && (
+        <ShareDialog projectId={project.id} projectName={project.name} folders={folders} brand={brand}
+          onClose={() => setShareOpen(false)} onCreated={detail} onNotice={setNotice} />
       )}
       {!!exportText && (
         <Modal title="Tên ảnh cho editor" close={() => setExportText("")}>
@@ -1911,63 +1704,5 @@ export default function Admin() {
         </Modal>
       )}
     </div>
-  );
-}
-function AlbumCard({ album, open }: { album: any; open: () => void }) {
-  return (
-    <button className="album-card" onClick={open}>
-      <div className="album-card-top">
-        <span className="folder-icon">
-          <Folder size={21} />
-        </span>
-        <span
-          className={`tag ${album.scan?.status === "completed" ? "green" : ""}`}
-        >
-          {album.scan?.status === "running"
-            ? "Đang quét"
-            : album.scan?.status === "failed"
-              ? "Lỗi nguồn"
-              : "Đã đồng bộ"}
-        </span>
-      </div>
-      <h3>{album.name}</h3>
-      <small>/{displayProjectPath(String(album.root))}</small>
-      <div className="album-metrics">
-        <span>
-          <strong>{album.photo_count}</strong> ảnh
-        </span>
-        <span>
-          <strong>{album.favorite_count}</strong> đã tim
-        </span>
-        <span className={album.open_comment_count ? "needs-work" : ""}>
-          <strong>{album.open_comment_count}</strong> ghi chú
-        </span>
-      </div>
-      <div className="album-open">
-        Mở album <ChevronRight size={15} />
-      </div>
-    </button>
-  );
-}
-function Stat({
-  label,
-  value,
-  icon,
-  detail,
-}: {
-  label: string;
-  value: number;
-  icon: React.ReactNode;
-  detail: string;
-}) {
-  return (
-    <article className="stat-card">
-      <div>
-        <span className="tiny-label">{label}</span>
-        <span className="stat-icon">{icon}</span>
-      </div>
-      <strong>{value.toLocaleString("vi-VN")}</strong>
-      <small>{detail}</small>
-    </article>
   );
 }
