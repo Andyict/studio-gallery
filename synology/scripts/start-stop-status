@@ -5,12 +5,14 @@ mkdir -p "$PKG_VAR/logs"
 
 # A pid file only counts while it still points at our own node process, so a
 # pid reused by another program after a crash does not look like "running".
+# Next.js renames its process to "next-server (vX)", hence the frontend marker.
+FRONTEND_MARKER='next-server|server\.js'
 running() {
   pidfile="$PKG_VAR/$1.pid"
   [ -f "$pidfile" ] || return 1
   pid=$(cat "$pidfile" 2>/dev/null || true)
   [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null || return 1
-  tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null | grep -q "$2"
+  tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null | grep -Eq "$2"
 }
 
 rotate_log() {
@@ -56,7 +58,7 @@ case "${1:-}" in
     )
     (
       export HOSTNAME=127.0.0.1 PORT=$WEB_PORT API_INTERNAL_URL=http://127.0.0.1:$API_PORT
-      launch frontend "server.js" "$PKG_TARGET/frontend/frontend" server.js
+      launch frontend "$FRONTEND_MARKER" "$PKG_TARGET/frontend/frontend" server.js
     )
     (
       export HOST=0.0.0.0 PORT=$GATEWAY_PORT API_PORT WEB_PORT
@@ -65,11 +67,11 @@ case "${1:-}" in
     ;;
   stop)
     halt gateway "gateway.mjs"
-    halt frontend "server.js"
+    halt frontend "$FRONTEND_MARKER"
     halt backend "src/server.mjs"
     ;;
   status)
-    running gateway "gateway.mjs" && running frontend "server.js" && running backend "src/server.mjs" || exit 3
+    running gateway "gateway.mjs" && running frontend "$FRONTEND_MARKER" && running backend "src/server.mjs" || exit 3
     ;;
   log)
     echo "$PKG_VAR/logs/backend.log"
