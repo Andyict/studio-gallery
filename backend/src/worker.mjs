@@ -2,18 +2,18 @@ import {photoPath} from './shares.mjs';
 import sharp from 'sharp';
 import { mkdir, readdir, rename, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
-import { pipeline } from 'node:stream/promises';
 import { safePath, safeOpen } from './security.mjs';
+import { isVideo, runMedia } from './media.mjs';
+import { cacheFile } from './previews.mjs';
+export { cacheFile };
 
-sharp.cache({ memory:64, files:0, items:50 });
-sharp.concurrency(1);
-import {rawExtensions,isVideo,runMedia} from './media.mjs';
-export const cacheFile = (config, photo, variant='preview') => path.join(config.cacheDir,`${photo.id}-${photo.version}-${variant}.${variant==='video'?'mp4':'webp'}`);
-
-export function createWorker(db, config, logger) {
+// Background job per photo version. Stills only get a thumbnail here (the 2048 px preview is made
+// on first view by previews.ensure); videos are transcoded up front because that takes minutes.
+export function createWorker(db, config, logger, previews) {
   let running = null;
-  let cacheCleaned = false;
+  // Files of replaced or removed photos are swept at start and then every few hours while idle.
+  let lastClean = 0;
+  const CLEAN_EVERY = 6 * 3600_000;
   db.run("UPDATE jobs SET status='pending' WHERE status='running'");
   async function cleanCache() {
     const expected=new Set();
@@ -22,72 +22,49 @@ export function createWorker(db, config, logger) {
       expected.add(path.basename(cacheFile(config,photo,'thumb')));
       if(isVideo(photo))expected.add(path.basename(cacheFile(config,photo,'video')));
     }
-    for(const name of await readdir(config.cacheDir))if(!expected.has(name))await rm(path.join(config.cacheDir,name),{force:true}).catch(()=>{});
+    const present=new Set(),tracked=new Set(db.all('SELECT file FROM preview_cache').map(r=>r.file));
+    for(const entry of await readdir(config.cacheDir,{withFileTypes:true})){
+      if(!entry.isFile())continue;
+      if(!expected.has(entry.name)){await rm(path.join(config.cacheDir,entry.name),{force:true}).catch(()=>{});continue;}
+      present.add(entry.name);
+      // Previews made before the cache budget existed (v0.2 rendered them all up front) are adopted,
+      // with their file time as last access, so they count toward the limit and can be evicted.
+      if(entry.name.endsWith('-preview.webp')&&!tracked.has(entry.name)){
+        const photo=db.get('SELECT id,filename,extension FROM photos WHERE id=?',entry.name.slice(0,36));
+        if(photo&&!isVideo(photo)){const info=await stat(path.join(config.cacheDir,entry.name));previews.adopt(entry.name,photo.id,info.size,info.mtimeMs);}
+      }
+    }
+    previews.forget([...tracked].filter(file=>!present.has(file)));
+    previews.evict();
   }
-  async function render(photo) {
+  async function renderVideo(photo) {
     const project = db.get('SELECT * FROM projects WHERE id=?',photo.project_id);
     const root = await photoPath(config.photoRoot,project.root);
     const source = await safeOpen(root,photo.relative_path);
-    const preview = cacheFile(config,photo);
-    const temp = `${preview}.tmp`;
+    const info = await source.stat();await source.close();
+    if (info.size !== photo.bytes || info.mtimeMs !== photo.mtime) throw new Error('Source changed; run sync again');
+    const filename=await safePath(root,photo.relative_path), video=cacheFile(config,photo,'video'), staging=video+'.tmp', poster=cacheFile(config,photo,'preview'), posterTemp=poster+'.tmp';
     try {
-      const info = await source.stat();
-      if (info.size !== photo.bytes || info.mtimeMs !== photo.mtime) throw new Error('Source changed; run sync again');
-      const options = { limitInputPixels:120_000_000, failOn:'error', sequentialRead:true };
-      if (isVideo(photo)) {
-        await source.close();
-        const filename=await safePath(root,photo.relative_path), video=cacheFile(config,photo,'video'), staging=video+'.tmp';
-        try {
-          await runMedia(config.ffmpeg,['-nostdin','-y','-loglevel','error','-threads','1','-protocol_whitelist','file,pipe','-i',filename,'-map','0:v:0','-map','0:a:0?','-vf',"scale=w='min(1280,iw)':h='min(1280,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2",'-c:v','libx264','-threads','1','-preset','veryfast','-crf','25','-pix_fmt','yuv420p','-c:a','aac','-ac','2','-b:a','128k','-map_metadata','-1','-movflags','+faststart','-f','mp4',staging]);
-          await rename(staging,video);
-          await runMedia(config.ffmpeg,['-nostdin','-y','-loglevel','error','-i',video,'-frames:v','1','-c:v','libwebp','-threads','1','-f','image2',temp],60000);
-        } finally { await rm(staging,{force:true}).catch(()=>{}); }
-      } else if (rawExtensions.has(photo.extension)) {
-        // Extract the camera's embedded JPEG. Never modify the source RAW or expose metadata/GPS.
-        await source.close();
-        const filename = await safePath(root,photo.relative_path);
-        let success = false;
-        for (const tag of ['JpgFromRaw','PreviewImage']) {
-          const proc = spawn(config.exiftool, ['-b',`-${tag}`,filename], { windowsHide:true, stdio:['ignore','pipe','ignore'] });
-          const timeout = setTimeout(() => proc.kill(),60_000);
-          const exited = new Promise((resolve,reject) => { proc.on('error',reject); proc.on('close',code => code===0 ? resolve() : reject(new Error('RAW preview extractor failed'))); });
-          try {
-            await Promise.all([pipeline(proc.stdout,sharp(options).rotate().resize({width:2048,height:2048,fit:'inside',withoutEnlargement:true}).webp({quality:85}), (await import('node:fs')).createWriteStream(temp)),exited]);
-            success=true; break;
-          } catch { proc.kill(); await exited.catch(()=>{}); } finally { clearTimeout(timeout); }
-        }
-        if (!success) throw new Error('RAW has no readable embedded JPEG. Provide matching JPG or install a compatible RAW renderer.');
-      } else {
-        await source.close();
-        const filename=await safePath(root,photo.relative_path);
-        try {
-          // Sharp/libvips is faster and preserves orientation for common photo formats.
-          await sharp(filename,options).rotate().resize({width:2048,height:2048,fit:'inside',withoutEnlargement:true}).webp({quality:85}).toFile(temp);
-        } catch(primaryError) {
-          // FFmpeg covers many professional/legacy formats that the bundled libvips may omit.
-          await rm(temp,{force:true}).catch(()=>{});
-          try {
-            await runMedia(config.ffmpeg,['-nostdin','-y','-loglevel','error','-protocol_whitelist','file,pipe','-i',filename,'-frames:v','1','-vf',"scale=w='min(2048,iw)':h='min(2048,ih)':force_original_aspect_ratio=decrease",'-c:v','libwebp','-threads','1','-f','image2',temp],60000);
-          } catch(fallbackError) {
-            throw new Error(`Unsupported image or codec: ${primaryError.message}; ${fallbackError.message}`);
-          }
-        }
-      }
-      await rename(temp,preview);
-      await sharp(preview).resize({width:480,height:720,fit:'inside',withoutEnlargement:true}).webp({quality:78}).toFile(`${cacheFile(config,photo,'thumb')}.tmp`);
+      await runMedia(config.ffmpeg,['-nostdin','-y','-loglevel','error','-threads','1','-protocol_whitelist','file,pipe','-i',filename,'-map','0:v:0','-map','0:a:0?','-vf',"scale=w='min(1280,iw)':h='min(1280,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2",'-c:v','libx264','-threads','1','-preset','veryfast','-crf','25','-pix_fmt','yuv420p','-c:a','aac','-ac','2','-b:a','128k','-map_metadata','-1','-movflags','+faststart','-f','mp4',staging]);
+      await rename(staging,video);
+      await runMedia(config.ffmpeg,['-nostdin','-y','-loglevel','error','-i',video,'-frames:v','1','-c:v','libwebp','-threads','1','-f','image2',posterTemp],60000);
+      await rename(posterTemp,poster);
+      await sharp(poster).resize({width:480,height:720,fit:'inside',withoutEnlargement:true}).webp({quality:78}).toFile(`${cacheFile(config,photo,'thumb')}.tmp`);
       await rename(`${cacheFile(config,photo,'thumb')}.tmp`,cacheFile(config,photo,'thumb'));
-      const meta = await sharp(preview).metadata();
-      db.run("UPDATE photos SET status='ready',error=NULL,width=?,height=? WHERE id=? AND version=?",meta.width,meta.height,photo.id,photo.version);
-    } finally { await source.close().catch(()=>{}); await rm(temp,{force:true}).catch(()=>{}); }
+      const meta = await sharp(poster).metadata();
+      return {width:meta.width,height:meta.height};
+    } finally { for(const f of [staging,posterTemp])await rm(f,{force:true}).catch(()=>{}); }
   }
   async function work() {
     await mkdir(config.cacheDir,{recursive:true});
-    if(!cacheCleaned){await cleanCache();cacheCleaned=true;}
-    const job = db.get("SELECT j.* FROM jobs j JOIN photos p ON p.id=j.photo_id WHERE j.status='pending' AND j.attempts<3 AND p.missing=0 AND j.version=p.version ORDER BY j.rowid LIMIT 1");
-    if (!job) return;
+    if(!lastClean){await cleanCache();lastClean=Date.now();}
+    const job = db.get("SELECT j.* FROM jobs j JOIN photos p ON p.id=j.photo_id WHERE j.status='pending' AND j.attempts<3 AND p.missing=0 AND p.paired_with IS NULL AND j.version=p.version ORDER BY j.rowid LIMIT 1");
+    if (!job) { if(Date.now()-lastClean>CLEAN_EVERY){lastClean=Date.now();await cleanCache().catch(e=>logger.warn({err:e},'Cache cleanup failed'));} return; }
     db.run("UPDATE jobs SET status='running',attempts=attempts+1 WHERE id=?",job.id);
+    const photo=db.get('SELECT * FROM photos WHERE id=?',job.photo_id);
     try {
-      await render(db.get('SELECT * FROM photos WHERE id=?',job.photo_id));
+      const {width,height}=isVideo(photo)?await renderVideo(photo):await previews.thumbnail(photo);
+      db.run("UPDATE photos SET status='ready',error=NULL,width=?,height=? WHERE id=? AND version=?",width,height,photo.id,photo.version);
       db.run("UPDATE jobs SET status='completed',error=NULL WHERE id=?",job.id);
     } catch(e) {
       logger.warn({photo:job.photo_id,error:e.message},'Preview failed');
@@ -98,7 +75,7 @@ export function createWorker(db, config, logger) {
   }
   return {
     tick() { if(!running) running=work().finally(()=>{running=null;}); return running; },
-    async drain() { while(db.get("SELECT 1 FROM jobs j JOIN photos p ON p.id=j.photo_id WHERE j.status='pending' AND j.attempts<3 AND p.missing=0 AND j.version=p.version")) await this.tick(); },
+    async drain() { while(db.get("SELECT 1 FROM jobs j JOIN photos p ON p.id=j.photo_id WHERE j.status='pending' AND j.attempts<3 AND p.missing=0 AND p.paired_with IS NULL AND j.version=p.version")) await this.tick(); },
     async stop() { await running; }
   };
 }

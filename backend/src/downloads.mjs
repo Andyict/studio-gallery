@@ -5,7 +5,7 @@ import { open } from 'node:fs/promises';
 import { digest, fail, safePath, safeOpen } from './security.mjs';
 import { cacheFile } from './worker.mjs';
 
-export function registerDownloads(app, {db,config,authenticate,photoAllowed,listOwned,photosFor,activeLink}) {
+export function registerDownloads(app, {db,config,authenticate,photoAllowed,listOwned,photosFor,activeLink,previews,logDownload}) {
   let active=0;
   app.post('/api/client/downloads',async(req,reply)=>{
     const session=authenticate(req); const link=activeLink(session);
@@ -15,7 +15,10 @@ export function registerDownloads(app, {db,config,authenticate,photoAllowed,list
     if(original && !link.originals) fail(403,'Không được tải file gốc');
     if(list_id) listOwned(session,list_id);
     if(photo_ids!==undefined&&(!Array.isArray(photo_ids)||photo_ids.length>config.maxZipFiles||photo_ids.some(id=>typeof id!=='string')))fail(400,'Danh sách ảnh tải không hợp lệ');
-    const photos=photo_ids?[...new Set(photo_ids)].map(photoID=>photoAllowed(session,photoID)):photosFor(session,{list_id,folder_id});
+    const chosen=photo_ids?[...new Set(photo_ids)].map(photoID=>photoAllowed(session,photoID)):photosFor(session,{list_id,folder_id});
+    // Originals of a RAW+JPG pair include the RAW file too.
+    const pairs=original&&chosen.length?db.all(`SELECT * FROM photos WHERE missing=0 AND paired_with IN (${chosen.map(()=>'?').join(',')})`,...chosen.map(p=>p.id)):[];
+    const photos=[...chosen,...pairs];
     if(!photos.length) fail(400,'Không có ảnh để tải');
     if(photos.length>config.maxZipFiles) fail(400,`Tối đa ${config.maxZipFiles} ảnh mỗi lượt; hãy tải từng thư mục`);
     const manifest=[];
@@ -51,14 +54,17 @@ export function registerDownloads(app, {db,config,authenticate,photoAllowed,list
         if(info.size!==entry.photo.bytes || info.mtimeMs!==entry.photo.mtime) { await handle.close(); fail(409,'Nguồn ảnh thay đổi; hãy đồng bộ lại'); }
         return handle;
       }
-      return open(cacheFile(config,entry.photo,isVideo(entry.photo)?'video':'preview'),'r');
+      // Previews are rendered on demand, so a ZIP of previews may create some as it streams.
+      return open(isVideo(entry.photo)?cacheFile(config,entry.photo,'video'):await previews.ensure(entry.photo),'r');
     }
     active++;
     let zip; let current; let finished=false;
     const cleanup=()=>{ if(finished)return; finished=true; active--; current?.destroy(); zip?.outputStream.destroy(); };
     try {
-      for(const entry of entries) { const handle=await source(entry); await handle.close(); }
+      // Preflight originals before sending headers (cheap); previews are checked as they stream.
+      for(const entry of entries.filter(e=>e.original)) { const handle=await source(entry); await handle.close(); }
       db.run('UPDATE download_tickets SET used=1 WHERE hash=?',ticket.hash);
+      logDownload(link,session,entries.some(e=>e.original),entries.length);
       zip=new yazl.ZipFile();
       zip.on('error',err=>{app.log.error({err},'ZIP stream failed'); reply.raw.destroy(err); cleanup();});
       for(const entry of entries) {
