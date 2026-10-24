@@ -49,7 +49,24 @@ flowchart LR
 
 ## Trạng thái điều hướng
 
-Manager có bốn màn hình chính: Duyệt thư mục, Hộp thư, Quản lý album, Cài đặt. Khi mở album từ thư mục hoặc hộp thư, các tab trong album gồm Tổng quan, Ảnh, Ảnh yêu thích, Cài đặt và hành động Tạo link. Quay lại phải trở về đúng màn hình đã mở album.
+Mỗi trang của Manager có URL riêng, nên F5, nút Back/Forward của trình duyệt, mở tab mới và gửi link cho đồng nghiệp đều giữ đúng chỗ:
+
+| URL | Trang |
+| --- | --- |
+| `/manager` | Việc cần làm |
+| `/manager/albums?status=&q=&sort=&mine=1&archived=1` | Danh sách album (lọc theo trạng thái, quá hạn, có tin mới, có ghi chú, album của tôi; sắp xếp theo mới tạo, hoạt động của khách, hạn trả, tên) |
+| `/manager/albums/<id>[/photos\|selections\|worklist\|links\|settings]` | Một album và tab của nó; tab Ảnh nhận thêm `?folder=&filter=&q=` |
+| `/manager/inbox[/<id>]` | Tin nhắn, mở sẵn hội thoại của một album |
+| `/manager/customers` | Khách hàng |
+| `/manager/folders?path=` | Thư mục NAS (không có với nhân viên *Chỉ album được giao*) |
+| `/manager/settings[/<tab>]` | Cài đặt (nhân viên chỉ có *Tài khoản của tôi*) |
+
+- **Tab Ảnh** tải 120 ảnh mỗi lần (cuộn để tải thêm), thumbnail tải dần; tìm theo tên file và lọc *Khách đã tim / Có ghi chú / Chọn edit / Lỗi xem trước / Đang xử lý*.
+- **Xem ảnh** (bấm vào ảnh ở tab Ảnh, Khách yêu thích, Danh sách edit): ảnh xem cỡ lớn, ghim ghi chú của khách, đánh dấu đã xử lý/mở lại, trả lời khách ngay trên ảnh; ←/→ chuyển ảnh, Esc đóng.
+- **Thao tác hàng loạt**: lưu trữ/khôi phục hoặc đổi trạng thái nhiều album; thu hồi nhiều link; đánh dấu xong mọi ảnh trong danh sách edit; xử lý hết ghi chú. Thao tác không hoàn tác được hoặc khách thấy ngay (thu hồi, lưu trữ, mở khoá cho khách chọn lại, trả ảnh, khoá tài khoản, cấp PIN mới, tắt nguồn ảnh) luôn hỏi xác nhận.
+- **Link và PIN chỉ hiện một lần**: hộp thoại không đóng khi bấm ra ngoài; đóng khi chưa sao chép sẽ hỏi lại.
+- **Hết phiên đăng nhập**: Manager hiện màn đăng nhập ngay trên URL đang mở, đăng nhập xong quay lại đúng trang.
+- **Điện thoại**: menu thành thanh tab ở đáy màn hình. Phím `/` nhảy vào ô tìm kiếm của trang.
 
 ## Giới hạn hiện tại cần theo dõi
 

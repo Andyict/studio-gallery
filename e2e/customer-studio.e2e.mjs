@@ -115,7 +115,7 @@ test('customer picks, notes, chats and submits; studio sees it and replies live'
   await studio.getByRole('button', { name: /Vào studio/ }).click();
   await studio.getByRole('heading', { name: 'Việc cần làm' }).waitFor();
   await studio.locator('.dashboard-card', { hasText: 'Khách đã gửi' }).getByText('Lan & Minh').waitFor();
-  await studio.getByRole('button', { name: /Tin nhắn album/ }).click();
+  await studio.getByRole('link', { name: /Tin nhắn/ }).click();
   await studio.getByRole('button', { name: /Lan & Minh/ }).click();
   await studio.getByText('Làm sáng góc trái').waitFor();
   await studio.getByLabel('Tin nhắn gửi khách').fill('Thứ 6 studio gửi ảnh nhé');
@@ -125,6 +125,30 @@ test('customer picks, notes, chats and submits; studio sees it and replies live'
   await customer.getByRole('button', { name: /Trò chuyện với studio, 1 tin mới/ }).waitFor({ timeout: 15_000 });
   await customer.getByRole('button', { name: /Trò chuyện với studio/ }).click();
   await customer.locator('.client-chat').getByText('Thứ 6 studio gửi ảnh nhé').waitFor();
+
+  // Manager: filter the album list, review the noted photo in the lightbox and resolve the note.
+  await studio.getByRole('link', { name: /^Album/ }).first().click();
+  await studio.getByRole('button', { name: /Khách đã gửi/ }).click();
+  await studio.waitForURL('**/manager/albums?status=submitted');
+  await studio.locator('.album-grid').getByRole('link', { name: /Lan & Minh/ }).click();
+  await studio.getByRole('link', { name: 'Ảnh', exact: true }).click();
+  await studio.getByRole('button', { name: 'Có ghi chú' }).click();
+  await studio.waitForURL('**/photos?filter=notes');
+  await studio.getByRole('button', { name: 'Xem IMG_001.jpg' }).click();
+  await studio.locator('.mgr-lightbox').getByText('Làm sáng góc trái').waitFor();
+  await studio.getByRole('button', { name: 'Đánh dấu đã xử lý' }).click();
+  await studio.locator('.mgr-lightbox').getByText(/Đã xử lý ·/).waitFor();
+  await studio.keyboard.press('Escape');
+  // The page lives in the URL: a reload comes back to the same album tab and filter.
+  const albumUrl = studio.url();
+  await studio.reload();
+  await studio.getByRole('heading', { name: 'Lan & Minh' }).waitFor();
+  assert.equal(studio.url(), albumUrl);
+  const studioPhone = await (await browser.newContext({ viewport: { width: 375, height: 812 }, storageState: await studio.context().storageState() })).newPage();
+  studioPhone.on('pageerror', e => errors.push(e.message));
+  await studioPhone.goto(`${origin}/manager/albums`);
+  await studioPhone.locator('.album-grid').getByText('Lan & Minh').waitFor();
+  assert.equal(await studioPhone.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), true, 'Manager fits 375 px');
 
   // Phone layout: no horizontal scrolling on the gallery.
   const phone = await (await browser.newContext({ viewport: { width: 375, height: 812 }, storageState: await customer.context().storageState() })).newPage();
